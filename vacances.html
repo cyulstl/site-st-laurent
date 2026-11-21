@@ -31,7 +31,8 @@
   .onglets button { border: 0; background: #fff; padding: 5px 14px; cursor: pointer; }
   .onglets button.on { background: #e8f0fe; color: #174ea6; font-weight: 500; }
   label.moi select { margin-left: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-  .mois { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mois { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 16px 0; }   /* right above the grid */
+  .mois:empty { display: none; }
   .mois button { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--muted); }
   .mois button:hover { color: var(--fg); border-color: #bdc1c6; }
   .plein { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 12px; cursor: pointer; color: var(--accent); }
@@ -141,7 +142,7 @@
   .echf button, .ouvrir { border: 1px solid var(--accent); background: #fff; color: var(--accent); border-radius: 16px; padding: 4px 12px; cursor: pointer; }
   #ech h2 .ouvrir { margin-left: 8px; font-size: 13px; vertical-align: 1px; }
   @media (max-width: 600px) {
-    .grille { max-height: none; margin: 8px 8px 0; } .tour, .dem, .leg { margin-left: 8px; margin-right: 8px; }
+    .grille { max-height: none; margin: 8px 8px 0; } .tour, .dem, .leg, .mois { margin-left: 8px; margin-right: 8px; }
     .g0, .g3 { display: none; } .g1 { left: 0; } .g2 { left: 40px; } .g4 { left: 78px; }   /* narrow: Ini., Pris, Ovlp. only */
   }
 </style>
@@ -154,10 +155,10 @@
 <div class="barre">
   <div class="onglets" id="onglets"></div>
   <label class="moi">Moi : <select id="moi"><option value="">—</option></select></label>
-  <div class="mois" id="mois"></div>
   <button class="plein" id="bPlein" hidden title="Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; Plein écran</button>
 </div>
 <div id="tour"></div>
+<div class="mois" id="mois"></div>
 <div class="grille" id="grille"></div>
 <div class="leg" id="leg"></div>
 <div class="dem" id="dem"></div>
