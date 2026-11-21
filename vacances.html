@@ -170,9 +170,10 @@ const CONFIG = {
   // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
   url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
   rafraichir: 2,            // minutes entre deux relectures de la feuille (la page reste ouverte pendant les tours)
-  toursComplets: [1, 2],    // tours où un cycle se prend au complet (cycle incomplet seulement si des jours sont bloqués)
-  maxCycles: 2,             // cycles par tour, aux tours complets
-  minJours: 3,              // minimum de jours d'un cycle incomplet
+  // règles par tour (les mêmes que le script) : cycles au maximum, jours minimum par cycle, cycle complet obligatoire
+  // quand ses jours sont libres (l'overlap n'est jamais obligatoire), ou jours seuls n'importe où
+  regles: { 1: { maxCycles: 2, minJours: 3, complet: true }, 2: { maxCycles: 2, minJours: 3, complet: true },
+            3: { maxCycles: 2, minJours: 3, complet: false }, 4: { jours: true } },
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pad = n => String(n).padStart(2, '0');
@@ -186,7 +187,7 @@ const mem = {
   set(k, v) { try { localStorage.setItem('vac.' + k, v); } catch (e) { /* pas de stockage */ } },
 };
 // S.d = data of the sheet, S.g = group shown (index), S.moi = my initials, S.sel = Set of day indexes I picked,
-// S.unParUn = click single days instead of whole cycles
+// S.unParUn = click single days instead of whole cycles (always, in a round of single days)
 const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: false, envoi: false };
 // personal code (4 digits from UK), required to send anything; kept on this device if « retenir » is ticked
 S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeRet = true; S.codeSaisie = '';
@@ -229,6 +230,8 @@ function etatJour(g, p, k) {
   if (n === g.max && !g.ovlpPar[k] && p.ov > 0) return 'ovlp';
   return 'complet';
 }
+
+const unJour = g => S.unParUn || !!(CONFIG.regles[g.tour] || { jours: true }).jours;
 
 /* ---------- rendering ---------- */
 function afficher() {
@@ -352,7 +355,7 @@ function blocs(ks) {
 // my picks grouped by cycle, with what the page can check
 function analyse() {
   const mm = moiDe(); if (!mm) return null;
-  const { g, p } = mm, complet = CONFIG.toursComplets.includes(g.tour);
+  const { g, p } = mm, R = CONFIG.regles[g.tour] || { jours: true }, complet = !!R.complet, parCycles = !R.jours;
   const parCycle = new Map();
   [...S.sel].forEach(k => {
     const c = cycleDe(p, k), cle = c.length ? c[0] : 'j' + k;
@@ -367,12 +370,14 @@ function analyse() {
     if (nOv) msgs.push(['w', `${nOv} jour${nOv > 1 ? 's' : ''} au maximum : il faudrait ton overlap`]);
     const libres = x.c.filter(k => !S.sel.has(k) && etatJour(g, p, k) === 'libre');
     if (complet && libres.length) msgs.push(['w', `cycle incomplet alors que ${libres.length} autre${libres.length > 1 ? 's' : ''} jour${libres.length > 1 ? 's sont libres' : ' est libre'} (${libres.map(k => jour(dateDe(k))).join(', ')})`]);
-    if (complet && ks.length < CONFIG.minJours) msgs.push(['w', `moins de ${CONFIG.minJours} jours`]);
-    if (!msgs.length) msgs.push(['ok', ks.length === 5 ? 'cycle complet' : 'cycle incomplet : les autres jours sont déjà pris']);
+    if (parCycles && ks.length < R.minJours) msgs.push(['w', `moins de ${R.minJours} jours`]);
+    if (!msgs.length) msgs.push(['ok', !parCycles ? 'ok' : ks.length === 5 ? 'cycle complet' : complet ? 'cycle incomplet : les autres jours sont déjà pris' : 'cycle incomplet (permis à ce tour)']);
     return { ks, msgs };
   });
   const gen = [];
-  if (complet && cycles.length > CONFIG.maxCycles) gen.push(['w', `${cycles.length} cycles : au tour ${g.tour}, c'est ${CONFIG.maxCycles} au maximum`]);
+  if (parCycles && cycles.length > R.maxCycles) gen.push(['w', `${cycles.length} cycles : au tour ${g.tour}, c'est ${R.maxCycles} au maximum`]);
+  const solde = parseFloat(String(p.solde).replace(',', '.'));
+  if (!isNaN(solde) && S.sel.size > solde) gen.push(['x', `${S.sel.size} jour${S.sel.size > 1 ? 's' : ''} choisi${S.sel.size > 1 ? 's' : ''}, il t'en reste ${solde} (solde)`]);
   if (nOvTot(cycles) > p.ov) gen.push(['x', `il te faudrait ${nOvTot(cycles)} overlaps, il t'en reste ${p.ov}`]);
   const qui = aQui(g);
   if (p.fini) gen.push(['x', 'tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour']);
@@ -392,10 +397,10 @@ function afficherDemande() {
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
   const alt = garde('alt'), note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
-    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${S.unParUn ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
+    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
     `À ton tour, ta demande est inscrite tout de suite dans la feuille et ton ✓ est coché (UK en reçoit une copie). Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
     (r[1] ? `<br><b>Règle du tour ${g.tour} :</b> ${esc(r[1])}` : '') + '</div>' +
-    `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>` +
+    ((CONFIG.regles[g.tour] || { jours: true }).jours ? '' : `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>`) +
     boiteCode();
   if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
   if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.</div>';
@@ -555,7 +560,7 @@ document.addEventListener('click', e => {
   const td = t.closest('tr.moi td.j.cl');
   if (td) {
     const mm = moiDe(), k = +td.dataset.k;
-    const ks = S.unParUn ? [k] : cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
+    const ks = unJour(mm.g) ? [k] : cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
     const tous = ks.every(x => S.sel.has(x));
     ks.forEach(x => (tous ? S.sel.delete(x) : S.sel.add(x)));
     S.msgDem = ['', ''];

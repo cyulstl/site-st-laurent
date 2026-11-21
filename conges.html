@@ -245,13 +245,13 @@ function envoyer(c) {
     S.d.conges.push([c.ini, c.ctype, c.debut, c.fin, c.note, S.d.auto ? 1 : 0]);
     S.d.conges.sort((x, y) => ((x[2] || '0') < (y[2] || '0') ? -1 : 1)); setTimeout(() => fini({ ok: 1, auto: S.d.auto }), 300); afficher(); return;
   }
+  // sent WITHOUT the browser's Google sign-in (with several Google accounts signed in, the old way — a script tag
+  // that carries the sign-in — got a Google sign-in page back and failed). Never sent twice: no 2nd way.
   const q = Object.entries(Object.assign({ type: 'equipe', quoi: 'conge_ajout' }, c)).map(([k, x]) => k + '=' + encodeURIComponent(x)).join('&');
-  const cb = '__cg' + Date.now(), s = document.createElement('script');
-  const minuterie = setTimeout(() => { delete window[cb]; s.remove(); fini(null); }, 25000);
-  window[cb] = r => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(r); };
-  s.onerror = () => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(null); };
-  s.src = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + q + '&callback=' + cb;
-  document.head.appendChild(s);
+  const ctl = new AbortController(), minuterie = setTimeout(() => ctl.abort(), 25000);
+  fetch(CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + q + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store', signal: ctl.signal })
+    .then(r => r.json()).then(r => { clearTimeout(minuterie); fini(r); })
+    .catch(() => { clearTimeout(minuterie); fini(null); });
 }
 
 /* ---------- loading ---------- */
