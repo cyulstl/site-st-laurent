@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demande de comp — St-Laurent</title>
+<!--
+  DEMANDE DE COMP — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé).
+  Lit les mêmes données que le calendrier (application Web de l'Admin. Worksheet) :
+    …/exec?type=equipe               quarts publiés, congés, fin de l'horaire publié
+    …/exec?type=equipe&quoi=cycles   équipes 5-4
+    …/exec?type=equipe&quoi=feries   fériés et relâche (marques seulement)
+    …/exec?type=equipe&quoi=besoins  Ideal staff (Setup G3:J18) et changements à venir (G23:K42)
+    …/exec?type=equipe&quoi=ts       heures d'OT (onglet « Heures OT ») : ordre d'appel et maximum par période
+
+  Pour chaque jour choisi :
+    1. le personnel du quart (jour, soir ou nuit) : un comp n'est possible que si ce quart reste au complet.
+       Pour le comp seulement, le 1000 compte comme un quart de jour et le 1100 comme un quart de soir.
+    2. qui peut faire l'OT (en congé ce jour-là + règles de fatigue du trouveur d'échanges) ;
+    3. deux quarts de 12 h (deux personnes déjà au travail qui allongent) qui couvrent la plupart des heures.
+  Jour pas encore publié : seulement le cycle 5-4 (qui est en congé), rien d'autre n'est vérifié.
+  Les listes suivent la liste d'appel de la page Heures d'OT (le moins d'heures d'OT de l'année OT en premier, OT prévus à
+  l'horaire compris). Les stagiaires ne sont jamais proposés : ils ne peuvent pas couvrir un quart. Les conditions (quick change…) et un solde négatif s'affichent sans changer l'ordre ;
+  seuls ceux qui ne peuvent pas sont mis à la fin. Une paire de 12 h vient au rang de la personne appelée le plus tard des deux.
+  Une personne qui dépasserait le maximum d'OT de la période garde sa place, avec son solde négatif en rouge : des congés comp
+  ou 699 peuvent lui débloquer des heures, invisibles dans ESS.
+  Sans ces heures, les listes reviennent en ordre alphabétique.
+-->
+<style>
+  :root {
+    --fg: #3c4043; --muted: #70757a; --line: #dadce0; --soft: #f1f3f4; --bg: #fff; --accent: #1a73e8;
+    --ok: #188038; --okt: #e6f4ea; --w: #a35200; --wt: #fef3d6; --x: #c5221f; --xt: #fce8e6;
+    --cy: #44617a; --cyt: #eaf1f7;
+    font-family: Roboto, "Segoe UI", Arial, sans-serif; font-size: 14px; color: var(--fg);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); }
+  button, select, input { font: inherit; color: inherit; }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
+  header label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  select { border: 1px solid var(--line); border-radius: 18px; padding: 5px 10px; background: var(--bg); }
+  .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
+  main { flex: 1 1 auto; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+  #gauche { border-right: 1px solid var(--line); padding: 12px 14px; overflow: auto; }
+  #droite { overflow: auto; padding: 12px 16px 24px; }
+  .pas { font-weight: 500; color: #202124; margin: 2px 0 8px; }
+  .pas small { font-weight: 400; color: var(--muted); }
+
+  .calnav { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .calnav b { flex: 1; text-align: center; font-weight: 500; text-transform: capitalize; }
+  .ico { width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; cursor: pointer; font-size: 18px; color: var(--muted); }
+  .ico:hover:not(:disabled) { background: var(--soft); }
+  .ico:disabled { opacity: .3; cursor: default; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal .dow { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0; text-transform: uppercase; }
+  .cal .j { position: relative; min-height: 46px; border: 1px solid transparent; border-radius: 6px; padding: 2px 2px 3px;
+            display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; }
+  .cal .j .n { color: var(--muted); font-size: 11px; }
+  .cal .j.we { background: #f5f7f9; }
+  .cal .j.fer .n { color: #c5221f; font-weight: 700; }
+  .cal .j.rel::before { content: ''; position: absolute; left: 3px; right: 3px; top: 0; height: 3px; border-radius: 2px; background: #b9a3e3; }
+  .cal .j.ok { cursor: pointer; }
+  .cal .j.ok:hover { border-color: var(--line); background: #f8f9fa; }
+  .cal .j.choisi { border-color: var(--accent); background: #e8f0fe; }
+  .cal .j.choisi::after { content: '✓'; position: absolute; right: 3px; top: 1px; font-size: 10px; color: var(--accent); font-weight: 700; }
+  .cal .j.passe { opacity: .35; }
+  .cal .j.auj .n { color: var(--accent); font-weight: 700; }
+  .q { font-size: 11px; line-height: 15px; padding: 0 4px; border-radius: 4px; background: var(--t, #eee); border-left: 3px solid var(--c, #999); white-space: nowrap; }
+  .q.cyc { background: #fff; border: 1px dashed #8aa4bd; color: var(--cy); }
+  .q.cg { background: var(--soft); border-left-color: #c4c7c5; color: var(--muted); }
+  .q.act { background: #eee; border-left-color: #80868b; color: var(--muted); }
+  .g-J { --c: #0097a7; --t: #cdeef2; } .g-N { --c: #8e24aa; --t: #ecd4f4; }
+  .g-S { --c: #1a5fd0; --t: #d3e2fc; } .g-M { --c: #6d4c41; --t: #e6d9d2; } .g-sup { --c: #c62828; --t: #f9d0d0; }
+  .leg { font-size: 12px; color: var(--muted); margin: 10px 0 4px; line-height: 1.6; }
+  .opts { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; display: grid; gap: 8px; }
+  .opts label { display: flex; align-items: center; gap: 8px; }
+  .lien { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font-size: 13px; justify-self: start; }
+  .st { font-size: 11px; color: #8a6100; }
+
+  .vide { color: var(--muted); padding: 40px 10px; text-align: center; line-height: 1.6; }
+  .rappel { background: #fff8e1; border: 1px solid #f6d36b; border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; }
+  .resume { background: #f8f9fa; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; font-size: 13px; }
+  .jour { border: 1px solid var(--line); border-radius: 10px; margin: 0 0 14px; overflow: hidden; }
+  .jtete { background: #f8f9fa; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .jtete b { color: #202124; font-size: 15px; }
+  .jcorps { padding: 8px 12px 12px; }
+  .perso { border-radius: 8px; padding: 7px 10px; font-size: 13px; margin: 2px 0 10px; }
+  .perso.ok { background: var(--okt); color: #0d652d; } .perso.w { background: var(--wt); color: #7a4100; }
+  .perso.x { background: var(--xt); color: #a50e0e; } .perso.cy { background: var(--cyt); color: var(--cy); }
+  .perso small { display: block; margin-top: 2px; opacity: .85; }
+  h3 { font-size: 13px; font-weight: 500; color: #202124; margin: 12px 0 6px; }
+  h3 small { font-weight: 400; color: var(--muted); }
+  .gens { display: flex; flex-wrap: wrap; gap: 6px; }
+  .p { border: 1px solid var(--line); border-left: 4px solid var(--sc); border-radius: 8px; padding: 4px 9px; background: var(--bg);
+       cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  .p.ok { --sc: var(--ok); } .p.w { --sc: #f29900; } .p.x { --sc: var(--x); opacity: .75; } .p.cy { --sc: #8aa4bd; }
+  .p b { color: #202124; }
+  .p .eq { font-size: 11px; color: var(--muted); }
+  .hts { font-size: 11px; color: #1967d2; font-variant-numeric: tabular-nums; }
+  .neg { font-size: 11px; color: #c5221f; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 4px; }
+  .det .i { color: #c5221f; }
+  .rappel small { display: block; color: var(--muted); margin-top: 2px; }
+  .resume s { color: var(--muted); }
+  .p.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .paire { border: 1px solid var(--line); border-left: 4px solid var(--sc); border-radius: 8px; padding: 6px 10px; margin: 6px 0; font-size: 13px; cursor: pointer; }
+  .paire.ok { --sc: var(--ok); } .paire.w { --sc: #f29900; } .paire.x { --sc: var(--x); opacity: .75; }
+  .paire.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .paire .pc { float: right; font-size: 12px; color: var(--muted); }
+  .qc { font-size: 11px; font-weight: 600; color: #8a6100; background: #fff3c4; border: 1px solid #f3d36b; border-radius: 9px; padding: 0 7px; }
+  .det { margin-top: 8px; font-size: 13px; background: #f8f9fa; border-radius: 8px; padding: 7px 10px; }
+  .det div { margin: 2px 0; }
+  .det .w { color: var(--w); } .det .x { color: var(--x); } .det .ok { color: var(--ok); } .det .q { color: #8a6100; }
+  .aucun { color: var(--muted); font-size: 13px; margin: 4px 0; }
+  .trous { font-size: 12px; color: var(--muted); margin: -4px 0 8px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 500; border-radius: 9px; padding: 0 7px; margin-left: 6px; vertical-align: 1px; }
+  .tag.fds { background: #e8f0fe; color: #1967d2; } .tag.fer { background: #fce8e6; color: #c5221f; } .tag.rel { background: #efe7fb; color: #5b2a86; }
+  footer { border-top: 1px solid var(--line); padding: 8px 16px; font-size: 12px; color: var(--muted); }
+  footer details { display: inline; }
+  footer summary { display: inline; cursor: pointer; color: var(--accent); }
+  footer ul { margin: 6px 0 2px; padding-left: 18px; }
+  .err { color: var(--x); }
+
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    #app { height: auto; }
+    main { display: block; }
+    #gauche { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    #droite { overflow: visible; }
+    .etat { margin-left: 0; width: 100%; }
+  }
+  /* phones (the Wix mobile box is about 280-320 px wide): bigger day numbers in the little calendar */
+  @media (max-width: 420px) {
+    .cal .dow { font-size: 12px; }
+    .cal .j .n { font-size: 13.5px; color: #3c4043; }
+    .cal .j.passe .n { color: var(--muted); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Demande de comp</h1>
+    <label>Je suis <select id="moi"><option value="">— initiales —</option></select></label>
+    <span class="etat" id="etat">Chargement de l'horaire…</span>
+  </header>
+  <main>
+    <section id="gauche">
+      <div class="pas">1. Choisis le ou les jours <small>(clique pour cocher, encore pour décocher)</small></div>
+      <div class="calnav">
+        <button class="ico" id="prec" aria-label="Mois précédent">‹</button>
+        <b id="titreMois"></b>
+        <button class="ico" id="suiv" aria-label="Mois suivant">›</button>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="leg">
+        <span class="q g-J">06:15</span> ton quart publié &nbsp;
+        <span class="q cyc">cycle</span> jour de travail selon ton cycle 5-4 (horaire pas encore publié)<br>
+        <b style="color:#c5221f">date en rouge</b> férié payé 1,5x &nbsp; <span style="display:inline-block;width:18px;height:3px;border-radius:2px;background:#b9a3e3;vertical-align:3px"></span> relâche scolaire
+      </div>
+      <div class="opts">
+        <span id="nbJours" class="aucun"></span>
+        <button class="lien" id="effacer" hidden>Effacer les jours choisis</button>
+        <label><input type="checkbox" id="tous"> Montrer aussi ceux qui ne peuvent pas (et pourquoi)</label>
+      </div>
+    </section>
+    <section id="droite"><div class="vide" id="res">Choisis tes initiales, puis un ou plusieurs jours de travail dans le calendrier.</div></section>
+  </main>
+  <footer>
+    Outil d'aide seulement : le comp doit quand même être approuvé comme d'habitude.
+    <details><summary>Règles vérifiées</summary><ul id="regles"></ul></details>
+  </footer>
+</div>
+
+<script>
+// ----- Réglages -----
+const CONFIG = {
+  // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
+  url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
+  tz: 'America/Toronto',
+  joursAffiches: 150,       // jusqu'où on peut choisir un jour (jours à partir d'aujourd'hui)
+  // Règles de fatigue (les mêmes que le trouveur d'échanges)
+  regles: {
+    reposMin: 480,          // jamais moins de 8 h entre la fin d'un quart et le début du suivant
+    quickChange: 600,       // moins de 10 h = quick change (10 h pile n'en est pas un) : permis, avec la marque « quick change »
+    quickChangeParCycle: 1, // au plus 1 quick change par cycle (bloc de jours de travail)
+    joursEnLigne: 8,        // jours civils de suite avec un quart (une nuit compte pour ses 2 jours)
+    nuitsJourCongé: 3,      // après ce nombre de nuits : jour de congé complet avant un quart de jour/soir
+  },
+  // Deux quarts de 12 h : deux personnes déjà au travail ce jour-là allongent leur quart jusqu'à 12 h
+  douzeH: 720,              // durée d'un quart allongé (minutes)
+  couvertureMin: 0.7,       // proposés s'ils couvrent au moins 70 % des heures de ton quart
+  maxPaires: 6,             // nombre de paires montrées par jour
+  quartTS: 8.5,             // heures comptées pour un quart complet en OT (pour le maximum par période)
+  // Pour le comp seulement : à quel quart appartient un quart selon son heure de début
+  // (le 1000 compte comme un jour, le 1100 comme un soir). Une nuit (finit à 5 h ou plus le lendemain)
+  // compte toujours comme une nuit, pour le jour où elle finit (comme l'Autobid et l'Ideal staff).
+  compGroupes: [
+    { nom: 'jour', de: '0400', a: '1059' },
+    { nom: 'soir', de: '1100', a: '2059' },
+    { nom: 'nuit', de: '2100', a: '0359' },
+  ],
+  restrictions: {},         // quarts qu'une personne ne fait jamais, ex. { XX: ['M'] } (visible dans le code)
+  groupes: [                // couleurs du calendrier
+    { nom: 'Jour',   lettre: 'J', de: '0400', a: '0959' },
+    { nom: 'Nooner', lettre: 'N', de: '1000', a: '1259' },
+    { nom: 'Soir',   lettre: 'S', de: '1300', a: '2059' },
+    { nom: 'Nuit',   lettre: 'M', de: '2100', a: '0359' },
+  ],
+};
+
+/* ---------- dates (« AAAA-MM-JJ », calculées en UTC) et heures (« HHMM ») ---------- */
+const pad = n => String(n).padStart(2, '0');
+const toUTC = d => { const [y, m, j] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, j)); };
+const fromUTC = x => x.getUTCFullYear() + '-' + pad(x.getUTCMonth() + 1) + '-' + pad(x.getUTCDate());
+const addDays = (d, k) => { const x = toUTC(d); x.setUTCDate(x.getUTCDate() + k); return fromUTC(x); };
+const di = d => Math.round(toUTC(d).getTime() / 864e5);
+const dateDe = i => fromUTC(new Date(i * 864e5));
+const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(toUTC(d));
+const mins = a => +a.slice(0, 2) * 60 + +a.slice(2);
+const hhmm = m => pad(Math.floor(((m % 1440) + 1440) % 1440 / 60)) + pad(((m % 60) + 60) % 60);
+const hm = a => a.slice(0, 2) + ':' + a.slice(2);
+const hmAbs = m => hm(hhmm(m));
+const duree = m => `${Math.floor(m / 60)} h${m % 60 ? ' ' + pad(m % 60) : ''}`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function nowLocal() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: CONFIG.tz, year: 'numeric', month: '2-digit',
+    day: '2-digit' }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return p.year + '-' + p.month + '-' + p.day;
+}
+const mem = {
+  get(k) { try { return localStorage.getItem('comp.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('comp.' + k, v); } catch (e) { /* pas de stockage */ } },
+};
+const dansPlage = (a, g) => g.de <= g.a ? (a >= g.de && a <= g.a) : (a >= g.de || a <= g.a);
+function groupe(a) { return CONFIG.groupes.find(g => dansPlage(a, g)) || { nom: '?', lettre: '?' }; }
+
+/* ---------- état ---------- */
+const S = { data: null, cyc: null, besoins: null, P: {}, moi: mem.get('moi') || '', jours: [], mois: null, tous: false,
+            det: {}, feries: {}, relache: [], ts: null };
+const AUJ = nowLocal();
+const publie = d => !!(S.data && S.data.horizon && d <= S.data.horizon);
+
+function quart(w, row, id) {
+  const [d, a, b, f, act] = row, i = di(d), s = i * 1440 + mins(a);
+  const e = s + ((mins(b) - mins(a) + 1440) % 1440 || 1440);
+  return faire({ id, w, f: f || 0, act: act || '', s, e });
+}
+// (re)build a shift's derived fields from its absolute start/end
+function faire(q) {
+  q.i = Math.floor(q.s / 1440); q.d = dateDe(q.i); q.a = hhmm(q.s); q.b = hhmm(q.e); q.g = groupe(q.a);
+  q.nuit = q.g.lettre === 'M' || q.e - q.i * 1440 >= 1440 + 300;      // ends at 05:00 or later the next day
+  return q;
+}
+const lab = q => `${fmt(q.d, { weekday: 'short', day: 'numeric' })} ${hm(q.a)}–${hm(q.b)}`;
+const estWE = d => toUTC(d).getUTCDay() % 6 === 0;
+const estRel = d => S.relache.some(r => d >= r[0] && d <= r[1]);
+const jourDe = q => q.nuit ? dateDe(Math.floor((q.e - 1) / 1440)) : q.d;   // a night counts for the day it ends
+function marques(d) {
+  return (estWE(d) ? '<span class="tag fds">fin de semaine</span>' : '') +
+    (S.feries[d] ? `<span class="tag fer">férié payé 1,5x : ${esc(S.feries[d])}</span>` : '') +
+    (estRel(d) ? `<span class="tag rel" title="${esc(S.relache.filter(r => d >= r[0] && d <= r[1]).map(r => r[2]).filter(Boolean).join(' — '))}">relâche scolaire</span>` : '');
+}
+const estCouverture = q => !(q.f & 4) && !q.act;
+// comp group of a shift: night (by the day it ends) or by start time (1000 = day, 1100 = evening)
+const compGroupe = q => q.nuit ? 'nuit' : (CONFIG.compGroupes.find(g => dansPlage(q.a, g)) || {}).nom;
+const codeHHMM = c => { const m = String(c).match(/^(\d{3,4})[A-Z]?$/); return m ? ('0' + m[1]).slice(-4) : ''; };
+const groupeCode = c => { const a = codeHHMM(c); return a ? (CONFIG.compGroupes.find(g => dansPlage(a, g)) || {}).nom : ''; };
+
+function construire() {
+  const P = {};
+  const perso = w => (P[w] = P[w] || { w, qs: [], cg: new Set(), sup: false, k: 0, prolonge: false, stag: false });
+  let id = 0;
+  if (S.data) {
+    for (const w of S.data.gens || []) {
+      const p = perso(w);
+      p.qs = ((S.data.q || {})[w] || []).map(r => quart(w, r, id++)).sort((x, y) => x.s - y.s);
+      for (const d of ((S.data.c || {})[w] || [])) p.cg.add(d);
+    }
+    for (const w of S.data.stag || []) perso(w).stag = true;
+  }
+  if (S.cyc) {
+    for (const [w, k, sup, pr] of S.cyc.gens || []) { const p = perso(w); p.k = k; p.sup = !!sup; p.prolonge = !!pr; }
+    for (const [w, a, b] of S.cyc.conges || []) if (P[w]) (P[w].conges = P[w].conges || []).push([a || '', b || '']);   // approved leaves
+  }
+  S.P = P;
+  const sel = document.getElementById('moi'), garde = S.moi;
+  sel.innerHTML = '<option value="">— initiales —</option>' +
+    Object.keys(P).sort().map(w => `<option${w === garde ? ' selected' : ''}>${esc(w)}</option>`).join('');
+  if (!P[S.moi]) S.moi = '';
+}
+function cycleTravaille(w, d) {
+  const p = S.P[w];
+  if (!S.cyc || !p || !p.k) return null;
+  // on an approved leave that day (« Congés » list; start or end may be empty): no cycle
+  if ((p.conges || []).some(([a, b]) => (!a || d >= a) && (!b || d <= b))) return null;
+  const n = di(d) - di(S.cyc.debut), j = ((n % 9) + 9) % 9 + 1;
+  return ((j - p.k + 9) % 9) < 5;
+}
+const quartDe = (w, d) => (S.P[w] ? S.P[w].qs.filter(q => q.d === d) : []);
+
+/* =====================================================================================
+   Règles de fatigue (les mêmes que le trouveur d'échanges) : on vérifie la liste de quarts d'une
+   personne APRÈS le changement et on ne garde que les problèmes qui touchent le quart ajouté.
+   ===================================================================================== */
+function verifier(liste) {
+  const R = CONFIG.regles, out = [];
+  const jourFin = q => Math.floor((q.e - 1) / 1440);
+  const blocs = [];
+  for (const q of liste) {
+    const b = blocs[blocs.length - 1];
+    if (b && q.i <= b.fin + 1) { b.qs.push(q); b.fin = Math.max(b.fin, jourFin(q)); }
+    else blocs.push({ deb: q.i, fin: jourFin(q), qs: [q] });
+  }
+  const qcs = [];
+  for (let k = 1; k < liste.length; k++) {
+    const a = liste[k - 1], b = liste[k], gap = b.s - a.e, t = a.nouveau || b.nouveau;
+    if (gap < 0) { if (t) out.push(['x', `chevauche ${lab(a.nouveau ? b : a)}`]); continue; }
+    if (gap < R.reposMin) { if (t) out.push(['x', `${duree(gap)} de repos entre ${lab(a)} et ${lab(b)} (minimum ${duree(R.reposMin)})`]); }
+    else if (gap < R.quickChange) qcs.push({ a, b, gap, t });         // under 10 h (exactly 10 h is not a quick change)
+    if (a.nuit && !b.nuit && t) {
+      let n = 1;
+      for (let j = k - 2; j >= 0 && liste[j].nuit && liste[j].i === liste[j + 1].i - 1; j--) n++;
+      const fa = jourFin(a);
+      if (b.i <= fa) out.push(['x', `${lab(b)} : le jour même où finit la nuit du ${fmt(a.d, { weekday: 'short', day: 'numeric' })}`]);
+      else if (b.i === fa + 1) {
+        if (n >= R.nuitsJourCongé) out.push(['x', `jour de congé complet requis après ${n} nuits (avant ${lab(b)})`]);
+        else out.push(['w', `${lab(b)} juste après ${n === 1 ? 'une nuit' : n + ' nuits'} (déconseillé, dernier recours)`]);
+      }
+    }
+  }
+  for (const b of blocs) {
+    if (!b.qs.some(q => q.nouveau)) continue;
+    const span = b.fin - b.deb + 1;
+    if (span > R.joursEnLigne) out.push(['x', `${span} jours de suite (maximum ${R.joursEnLigne})`]);
+    const qb = qcs.filter(x => b.qs.includes(x.a));
+    for (const x of qb.filter(x => x.t)) {
+      if (qb.length > R.quickChangeParCycle) out.push(['x', `${qb.length} quick changes dans le même cycle (maximum ${R.quickChangeParCycle})`]);
+      else out.push(['q', `quick change : ${duree(x.gap)} entre ${lab(x.a)} et ${lab(x.b)}`]);
+    }
+  }
+  return out;
+}
+const resume = r => {
+  const u = [...new Map(r.map(x => [x[1], x])).values()];
+  return { niv: u.some(x => x[0] === 'x') ? 'x' : u.some(x => x[0] === 'w') ? 'w' : 'ok', r: u, qc: u.some(x => x[0] === 'q') };
+};
+// person w drops `retirer` (or nothing) and works `ajout`
+function evaluer(w, retirer, ajout) {
+  const p = S.P[w], r = [];
+  if (!p) return { niv: 'x', r: [['x', 'pas dans l\'horaire']] };
+  if (p.cg.has(ajout.d)) r.push(['x', 'en congé ce jour-là']);
+  const base = p.qs.filter(q => q !== retirer);
+  if (base.some(q => q.d === ajout.d)) r.push(['x', 'travaille déjà ce jour-là']);
+  const lim = CONFIG.restrictions[w] || [];
+  if (lim.includes(ajout.g.lettre) || lim.includes(String(+ajout.a))) r.push(['x', 'ne fait pas ce genre de quart']);
+  if (!r.length) {
+    const nouv = Object.assign({}, ajout, { nouveau: true });
+    const liste = base.filter(q => Math.abs(q.i - ajout.i) <= 14).concat(nouv).sort((x, y) => x.s - y.s);
+    r.push(...verifier(liste));
+  }
+  return resume(r);
+}
+const pire = (...n) => n.includes('x') ? 'x' : n.includes('w') ? 'w' : n.includes('cy') ? 'cy' : 'ok';
+
+/* ---------- heures d'OT : ordre d'appel et maximum par période ---------- */
+const nb = x => (Math.round(x * 100) / 100).toLocaleString('fr-CA', { maximumFractionDigits: 2 });
+const tsDe = w => (S.ts ? S.ts.gens.find(g => g.i === w) : null) || null;
+const perDe = D => (S.ts ? S.ts.periodes.findIndex(p => D >= p.debut && D <= p.fin) : -1);
+// hours left in D's period for w (null = no maximum or unknown period)
+function resteTS(w, D) {
+  const g = tsDe(w), k = perDe(D);
+  if (!g || k < 0 || !S.ts.max) return null;
+  // like ESS (all paid hours − normal hours) when the period is covered, else OT done + planned
+  return S.ts.max - (g.e && g.e[k] !== null && g.e[k] !== undefined ? g.e[k] : g.p[k][0] + g.p[k][1]);
+}
+// over the period maximum: not blocked (comp and 699 leave can unlock hours, and ESS shows them as plain leave),
+// but the negative balance is kept in ev.neg, shown in red, and puts the person after everyone else
+function plafond(ev, w, D, heures) {
+  const r = resteTS(w, D);
+  if (r === null || r + 1e-9 >= heures) return ev;
+  const apres = Math.round((r - heures) * 100) / 100;
+  const t = `solde de la période après cet OT : ${nb(apres)} h (maximum ${nb(S.ts.max)} h) — possible seulement si des congés comp ou 699 lui débloquent des heures`;
+  return Object.assign({}, ev, { neg: apres, r: ev.r.concat([['i', t]]) });
+}
+const negTag = n => (n != null ? `<span class="neg" title="Solde de la période après cet OT (congés comp ou 699 à vérifier)">${nb(n)} h</span>` : '');
+// call order: fewest OT hours first (trainees after); alphabetical when the hours aren't loaded
+const ordreTS = (a, b) => (a.p.stag - b.p.stag) ||
+  ((tsDe(a.w) ? tsDe(a.w).an : 1e9) - (tsDe(b.w) ? tsDe(b.w).an : 1e9)) || (a.w < b.w ? -1 : 1);
+// place of one person in the call list (smaller = called sooner), for the 12 h pairs
+const posAppel = w => {
+  const qui = Object.keys(S.P).map(x => ({ w: x, p: S.P[x] })).sort(ordreTS).map(x => x.w);
+  const i = qui.indexOf(w);
+  return i < 0 ? 1e9 : i;
+};
+
+/* =====================================================================================
+   Personnel : quarts de couverture prévus vs Ideal staff, par quart (jour / soir / nuit) pour le comp
+   ===================================================================================== */
+function requis(D, grp) {
+  const b = S.besoins;
+  if (!b || !b.base) return null;
+  const wd = toUTC(D).getUTCDay(), t = wd === 6 ? 1 : wd === 0 ? 2 : 0;
+  const table = Object.assign({}, [b.base.week, b.base.sat, b.base.sun][t] || {});
+  for (const c of b.changes || []) if (c.from <= D) table[c.code] = Math.max(0, (table[c.code] || 0) + ((c.d || [])[t] || 0));
+  let n = 0;
+  for (const [code, k] of Object.entries(table)) if (groupeCode(code) === grp) n += +k || 0;
+  return n;
+}
+const prevus = (D, grp) => Object.values(S.P).reduce((n, p) =>
+  n + p.qs.filter(q => estCouverture(q) && compGroupe(q) === grp && jourDe(q) === D).length, 0);
+
+/* =====================================================================================
+   Pour un jour : personnel, qui peut faire l'OT, deux quarts de 12 h
+   ===================================================================================== */
+function analyser(D) {
+  const moi = S.moi, out = { D, pub: publie(D), libres: [], paires: [] };
+  const peut = w => w !== moi && !!S.P[w] && !S.P[w].stag;      // trainees can't cover a shift: never offered
+  if (out.pub) {
+    const X = quartDe(moi, D).find(estCouverture);
+    if (!X) return out;
+    out.X = X; out.jX = jourDe(X); out.grp = compGroupe(X);
+    out.requis = requis(out.jX, out.grp); out.prevus = prevus(out.jX, out.grp);
+    // holes already in « Shifts en banque » that overlap my shift
+    out.trous = ((S.data && S.data.libres) || []).filter(l => {
+      const s = di(l[0]) * 1440 + mins(l[1]), e = s + ((mins(l[2]) - mins(l[1]) + 1440) % 1440 || 1440);
+      return s < X.e && e > X.s;
+    });
+    // 1) full OT shift: people with no shift that day
+    for (const w of Object.keys(S.P).filter(peut).sort()) {
+      if (quartDe(w, D).length) continue;
+      const ev = plafond(evaluer(w, null, Object.assign({}, X, { f: X.f | 1 })), w, X.d, Math.min((X.e - X.s) / 60, CONFIG.quartTS));
+      out.libres.push({ w, p: S.P[w], niv: ev.niv, ev });
+    }
+    // 2) two people already at work stretch to 12 h (earlier start or later end) to cover most of my hours
+    const ext = [];
+    for (const w of Object.keys(S.P).filter(peut)) for (const Y of S.P[w].qs) {
+      if (!estCouverture(Y) || Math.abs(Y.i - X.i) > 1 || Y.e - Y.s >= CONFIG.douzeH) continue;
+      const plus = CONFIG.douzeH - (Y.e - Y.s);
+      if (Y.s > X.s) ext.push({ w, Y, s: Y.s - plus, e: Y.e, sens: 'tot', por: [Math.max(Y.s - plus, X.s), Math.min(Y.s, X.e)] });
+      if (Y.e < X.e) ext.push({ w, Y, s: Y.s, e: Y.e + plus, sens: 'tard', por: [Math.max(Y.e, X.s), Math.min(Y.e + plus, X.e)] });
+    }
+    const utiles = ext.filter(x => x.por[1] > x.por[0]);
+    for (const x of utiles) x.ev = plafond(evaluer(x.w, x.Y, faire(Object.assign({}, x.Y, { s: x.s, e: x.e, f: x.Y.f | 1 }))),
+      x.w, x.Y.d, (CONFIG.douzeH - (x.Y.e - x.Y.s)) / 60);
+    const L = X.e - X.s;
+    for (let i = 0; i < utiles.length; i++) for (let j = i + 1; j < utiles.length; j++) {
+      const a = utiles[i], b = utiles[j];
+      if (a.w === b.w) continue;
+      const [p1, p2] = [a.por, b.por].sort((u, v) => u[0] - v[0]);
+      const couvre = (p1[1] - p1[0]) + (p2[1] - p2[0]) - Math.max(0, Math.min(p1[1], p2[1]) - p2[0]);
+      const pc = couvre / L;
+      if (pc < CONFIG.couvertureMin) continue;
+      out.paires.push({ a, b, pc, niv: pire(a.ev.niv, b.ev.niv), qc: a.ev.qc || b.ev.qc });
+    }
+    // call-list order too: a pair comes as soon as its later-called person would be called, then its other person,
+    // then the one covering more of the shift; pairs that can't work at the end
+    const pos = {}, posDe = w => (w in pos ? pos[w] : (pos[w] = posAppel(w)));
+    const cle = x => [Math.max(posDe(x.a.w), posDe(x.b.w)), Math.min(posDe(x.a.w), posDe(x.b.w))];
+    out.paires.sort((u, v) => (u.niv === 'x') - (v.niv === 'x') || cle(u)[0] - cle(v)[0] || cle(u)[1] - cle(v)[1] || v.pc - u.pc);
+  } else {
+    if (!cycleTravaille(moi, D)) return out;
+    out.jX = D;
+    for (const w of Object.keys(S.P).filter(peut).sort()) {
+      const c = cycleTravaille(w, D);
+      if (c === null) continue;
+      if (c || S.P[w].cg.has(D)) { out.libres.push({ w, p: S.P[w], niv: 'x', ev: { r: [['x', c ? 'travaille ce jour-là selon son cycle 5-4' : 'en congé ce jour-là']] } }); continue; }
+      const ev = plafond({ niv: 'ok', r: [] }, w, D, CONFIG.quartTS);
+      out.libres.push({ w, p: S.P[w], niv: 'cy', ev });
+    }
+  }
+  // the call list of the OT page: fewest OT hours first, trainees after; conditions and a negative balance only
+  // show as tags (they don't move anyone); those who can't do it at the end
+  out.libres.sort((a, b) => (a.niv === 'x') - (b.niv === 'x') || ordreTS(a, b));
+  return out;
+}
+
+/* =====================================================================================
+   Affichage
+   ===================================================================================== */
+const classeQ = q => (q.f & 2) ? 'g-sup' : 'g-' + q.g.lettre;
+function afficherCal() {
+  const cal = document.getElementById('cal');
+  const fin = addDays(AUJ, CONFIG.joursAffiches);
+  if (!S.mois) S.mois = (S.jours[0] || AUJ).slice(0, 8) + '01';
+  const prochain = m => addDays(m.slice(0, 8) + '28', 4).slice(0, 8) + '01';
+  document.getElementById('prec').disabled = S.mois <= AUJ.slice(0, 8) + '01';
+  document.getElementById('suiv').disabled = prochain(S.mois) > fin;
+  document.getElementById('titreMois').textContent = fmt(S.mois, { month: 'long', year: 'numeric' });
+  let h = '';
+  const start = addDays(S.mois, -toUTC(S.mois).getUTCDay());
+  for (let i = 0; i < 7; i++) h += `<div class="dow">${fmt(addDays(start, i), { weekday: 'narrow' })}</div>`;
+  const moi = S.moi, nextM = prochain(S.mois);
+  for (let d = start; d < nextM || toUTC(d).getUTCDay() !== 0; d = addDays(d, 1)) {
+    if (d.slice(0, 7) !== S.mois.slice(0, 7)) { h += '<div></div>'; continue; }
+    const cls = ['j'];
+    let inner = '', ok = false;
+    if (d < AUJ || d > fin) cls.push('passe');
+    if (d === AUJ) cls.push('auj');
+    if (estWE(d)) cls.push('we');
+    if (S.feries[d]) cls.push('fer');
+    if (estRel(d)) cls.push('rel');
+    if (moi && S.P[moi]) {
+      const p = S.P[moi];
+      if (p.cg.has(d)) inner = '<span class="q cg">congé</span>';
+      else if (publie(d)) {
+        const q = quartDe(moi, d)[0];
+        if (q) {
+          const cov = estCouverture(q);
+          inner = `<span class="q ${cov ? classeQ(q) : 'act'}" title="${esc(lab(q) + (q.act ? ' · ' + q.act : ''))}">${hm(q.a)}</span>`;
+          ok = cov;
+        }
+      } else if (cycleTravaille(moi, d)) { inner = '<span class="q cyc">cycle</span>'; ok = true; }
+    }
+    if (ok && !cls.includes('passe')) cls.push('ok');
+    if (S.jours.includes(d)) cls.push('choisi');
+    const tt = [S.feries[d] ? 'Férié payé 1,5x : ' + S.feries[d] : '', estRel(d) ? 'Relâche scolaire' : ''].filter(Boolean).join(' · ');
+    h += `<div class="${cls.join(' ')}" ${cls.includes('ok') || cls.includes('choisi') ? `data-d="${d}"` : ''}${tt ? ` title="${esc(tt)}"` : ''}>` +
+      `<span class="n">${+d.slice(8)}</span>${inner}</div>`;
+  }
+  cal.innerHTML = h;
+  const n = S.jours.length;
+  document.getElementById('nbJours').textContent = n ? `${n} jour${n > 1 ? 's' : ''} choisi${n > 1 ? 's' : ''}` : '';
+  document.getElementById('effacer').hidden = !n;
+}
+
+const NIV = { ok: 'peut', w: 'peut, avec conditions', x: 'ne peut pas', cy: 'en congé selon le cycle' };
+const lignes = (qui, ev) => !ev ? '' :
+  (ev.r.some(([n]) => n !== 'i') ? '' : `<div class="ok">${qui} : ✓ aucun problème</div>`) +
+  ev.r.map(([n, t]) => `<div class="${n}">${qui} : ${esc(t)}</div>`).join('');
+
+function blocJour(A, k) {
+  const jourL = fmt(A.D, { weekday: 'long', day: 'numeric', month: 'long' });
+  let h = `<div class="jour" id="j${k}"><div class="jtete"><b>${jourL}</b>`;
+  if (A.pub && !A.X) return h + '</div><div class="jcorps"><div class="aucun">Pas de quart de couverture ce jour-là.</div></div></div>';
+  h += A.pub ? ` · ton quart ${hm(A.X.a)}–${hm(A.X.b)} (${A.grp})${marques(A.jX)}` : ` · jour de travail selon ton cycle 5-4${marques(A.D)}`;
+  h += '</div><div class="jcorps">';
+
+  // 1) staffing
+  if (!A.pub) h += '<div class="perso cy">Horaire pas encore publié : le personnel n\'est pas vérifiable. La liste montre seulement qui est en congé selon son cycle 5-4 (règles de fatigue pas vérifiées).</div>';
+  else if (A.requis === null) h += `<div class="perso cy">${A.prevus} au ${A.grp} ce jour-là. Besoins de personnel indisponibles (application Web pas à jour ?).</div>`;
+  else {
+    const sur = A.prevus - A.requis, base = `${cap(A.grp)} : ${A.prevus} prévu${A.prevus > 1 ? 's' : ''}, ${A.requis} requis`;
+    if (sur >= 1) h += `<div class="perso ok">${base} — le ${A.grp} reste au complet sans toi : comp possible sans remplaçant` +
+      `${sur > 1 ? ` (${sur} de surplus)` : ''}.<small>Si quelqu'un d'autre demande le même jour, le surplus est partagé.</small></div>`;
+    else if (sur === 0) h += `<div class="perso w">${base} — il faut quelqu'un pour te remplacer (OT ou deux quarts de 12 h).</div>`;
+    else h += `<div class="perso x">${base} — déjà en manque de ${-sur} : il faudrait combler ${-sur > 1 ? 'ces trous' : 'ce trou'} en plus de ton quart.</div>`;
+  }
+  if (A.trous && A.trous.length) h += `<div class="trous">Déjà en banque pendant ton quart : ` +
+    A.trous.map(l => `${hm(l[1])}–${hm(l[2])}${l[4] > 1 ? ` (${l[4]} places)` : ''}`).join(', ') + '</div>';
+
+  // 2) full OT shift
+  const vis = A.libres.filter(c => c.niv !== 'x' || S.tous);
+  const nOk = A.libres.filter(c => c.niv === 'ok').length, nW = A.libres.filter(c => c.niv === 'w').length;
+  h += `<h3>${A.pub ? 'Peuvent faire ton quart en OT' : 'En congé ce jour-là (cycle 5-4)'} <small>` +
+    (A.pub ? `${nOk} oui · ${nW} avec conditions` : `${A.libres.filter(c => c.niv === 'cy').length} personne(s)`) +
+    (S.ts ? ' · dans l\'ordre d\'appel' : ' · ordre alphabétique') + '</small></h3>';
+  if (!vis.length) h += '<div class="aucun">Personne.</div>';
+  else {
+    h += '<div class="gens">';
+    vis.forEach((c, i) => {
+      const key = `${k}_l${i}`;
+      S.det[key] = { w: c.w, ev: c.ev, niv: c.niv };
+      const g = tsDe(c.w);
+      h += `<span class="p ${c.niv}" data-k="${key}"><b>${esc(c.w)}</b>${g ? `<span class="hts" title="Heures d'OT de l'année OT (faites et prévues)">${nb(g.an)} h</span>` : ''}` +
+        `${c.p.k ? `<span class="eq">Éq. ${c.p.k}</span>` : ''}` +
+        `${c.ev.qc ? '<span class="qc">quick change</span>' : ''}${negTag(c.ev.neg)}</span>`;
+    });
+    h += '</div>';
+  }
+
+  // 3) two 12 h shifts
+  if (A.pub) {
+    const pv = A.paires.filter(p => p.niv !== 'x' || S.tous).slice(0, CONFIG.maxPaires);
+    h += `<h3>Ou deux quarts de 12 h <small>deux personnes déjà au travail allongent leur quart (au moins ${Math.round(CONFIG.couvertureMin * 100)} % de tes heures)</small></h3>`;
+    if (!pv.length) h += '<div class="aucun">Aucune paire possible.</div>';
+    pv.forEach((pr, i) => {
+      const key = `${k}_p${i}`;
+      S.det[key] = { paire: pr };
+      const t = x => `<b>${esc(x.w)}</b>${tsDe(x.w) ? ` <span class="hts">${nb(tsDe(x.w).an)} h</span>` : ''}${negTag(x.ev.neg)} ${hm(x.Y.a)} → ` +
+        `${x.sens === 'tot' ? `arrive à ${hmAbs(x.s)}` : `reste jusqu'à ${hmAbs(x.e)}`}`;
+      h += `<div class="paire ${pr.niv}" data-k="${key}"><span class="pc">couvre ${Math.round(pr.pc * 100)} %</span>` +
+        `${t(pr.a)} &nbsp;+&nbsp; ${t(pr.b)}${pr.qc ? ' <span class="qc">quick change</span>' : ''}</div>`;
+    });
+  }
+  return h + '<div class="det" hidden></div></div></div>';
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+function afficherRes() {
+  const el = document.getElementById('res');
+  S.det = {};
+  if (!S.moi) { el.className = 'vide'; el.innerHTML = 'Choisis tes initiales, puis un ou plusieurs jours de travail dans le calendrier.'; return; }
+  if (!S.jours.length) { el.className = 'vide'; el.innerHTML = 'Clique un ou plusieurs de tes jours de travail dans le calendrier' +
+    (matchMedia('(max-width: 760px)').matches ? ' (plus haut)' : '') + '.'; return; }
+  el.className = '';
+  const res = S.jours.slice().sort().map(analyser);
+  const T = S.ts;
+  let h = T ? `<div class="rappel">📋 <b>Ordre d'appel :</b> les listes sont dans l'ordre d'appel, le moins d'heures d'OT depuis le ` +
+      `${fmt(T.annee.debut, { day: 'numeric', month: 'long', year: 'numeric' })} en premier, OT déjà prévus à l'horaire compris. Les stagiaires ne sont pas proposés (ils ne peuvent pas couvrir un quart). Un OT peut toujours être refusé.` +
+      `${T.max ? ` Maximum de ${nb(T.max)} h d'OT par période : qui le dépasserait garde sa place, avec son solde négatif en rouge ` +
+        `(des congés comp ou 699 peuvent débloquer des heures ; chacun vérifie son solde).` : ''}` +
+      `<small>Heures d'OT mises à jour ${esc(T.at)}.</small></div>`
+    : '<div class="rappel">📋 <b>Ordre d\'appel :</b> selon les heures d\'OT de l\'année OT (remise à zéro au début de la première période ' +
+      'publiée après le 1er septembre). Ces heures ne sont pas chargées : <b>vérifie-les avant d\'appeler</b>. Les listes sont en ordre alphabétique.</div>';
+  if (res.length > 1) {
+    const peut = A => new Set(A.libres.filter(c => c.niv !== 'x').map(c => c.w));
+    const sets = res.filter(A => A.X || !A.pub).map(peut);
+    let tous = sets.length ? [...sets[0]].filter(w => sets.every(s => s.has(w))) : [];
+    tous = tous.map(w => ({ w, p: S.P[w] })).sort(ordreTS).map(x => x.w);
+    // several days in the same period: their OT hours add up; lowest balance after all those days
+    const solde = {};
+    for (const w of tous) {
+      const tot = {};
+      for (const A of res) {
+        if (A.pub && !A.X) continue;
+        const D = A.pub ? A.X.d : A.D, k = perDe(D), r = resteTS(w, D);
+        if (k < 0 || r === null) continue;
+        tot[k] = (tot[k] || 0) + (A.pub ? Math.min((A.X.e - A.X.s) / 60, CONFIG.quartTS) : CONFIG.quartTS);
+        const apres = Math.round((r - tot[k]) * 100) / 100;
+        if (apres < 0 && (solde[w] === undefined || apres < solde[w])) solde[w] = apres;
+      }
+    }
+    tous = tous.map(w => ({ w, p: S.P[w] })).sort(ordreTS).map(x => x.w);
+    const nom = w => esc(w) + (solde[w] !== undefined ? ' ' + negTag(solde[w]) : '');
+    const nNeg = Object.keys(solde).length;
+    h += `<div class="resume"><b>Libres pour tous les jours choisis :</b> ${tous.length ? tous.map(nom).join(', ') : 'personne'}` +
+      `<br><small>${S.ts ? 'Dans l\'ordre d\'appel. ' : ''}${nNeg ? 'En rouge : solde de la période après tous ces jours (sous le maximum). ' : ''}` +
+      `Jour par jour plus bas. Pour plusieurs jours, demande d'abord à ces personnes.</small></div>`;
+  }
+  h += res.map((A, k) => blocJour(A, k)).join('');
+  el.innerHTML = h;
+}
+
+function montrerDetail(elt) {
+  const r = S.det[elt.dataset.k], bloc = elt.closest('.jour'), det = bloc.querySelector('.det');
+  const on = elt.classList.contains('on');
+  bloc.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
+  if (on) { det.hidden = true; return; }
+  elt.classList.add('on');
+  let h;
+  if (r.paire) {
+    const x = r.paire;
+    const ligne = y => `<div><b>${esc(y.w)}</b> : ${lab(y.Y)} → ${hmAbs(y.s)}–${hmAbs(y.e)} (12 h, ${duree(CONFIG.douzeH - (y.Y.e - y.Y.s))} d'OT)</div>` + lignes(esc(y.w), y.ev);
+    h = ligne(x.a) + ligne(x.b) + `<div>Ensemble, ils couvrent ${Math.round(x.pc * 100)} % des heures de ton quart.</div>`;
+  } else if (r.niv === 'cy') h = `<div>${esc(r.w)} est en congé ce jour-là selon son cycle 5-4. Horaire pas encore publié : règles de fatigue pas vérifiées.</div>`;
+  else h = lignes(esc(r.w), r.ev);
+  det.innerHTML = h; det.hidden = false;
+}
+
+/* ---------- événements ---------- */
+document.getElementById('moi').onchange = e => {
+  S.moi = e.target.value; mem.set('moi', S.moi); S.jours = []; S.mois = null; afficherCal(); afficherRes();
+};
+document.getElementById('prec').onclick = () => { S.mois = addDays(S.mois, -1).slice(0, 8) + '01'; afficherCal(); };
+document.getElementById('suiv').onclick = () => { S.mois = addDays(S.mois.slice(0, 8) + '28', 4).slice(0, 8) + '01'; afficherCal(); };
+document.getElementById('cal').onclick = e => {
+  const c = e.target.closest('[data-d]'); if (!c) return;
+  const d = c.dataset.d;
+  S.jours = S.jours.includes(d) ? S.jours.filter(x => x !== d) : S.jours.concat(d);
+  afficherCal(); afficherRes();
+};
+document.getElementById('effacer').onclick = () => { S.jours = []; afficherCal(); afficherRes(); };
+document.getElementById('tous').onchange = e => { S.tous = e.target.checked; afficherRes(); };
+document.getElementById('res').onclick = e => { const x = e.target.closest('[data-k]'); if (x) montrerDetail(x); };
+(function regles() {
+  const R = CONFIG.regles;
+  document.getElementById('regles').innerHTML = [
+    'un comp est possible seulement si le quart demandé (jour, soir ou nuit) reste au complet selon l\'Ideal staff ; pour le comp, le 1000 compte comme un jour et le 1100 comme un soir',
+    `remplaçant : quelqu'un en congé ce jour-là fait ton quart en OT, ou deux personnes déjà au travail allongent leur quart à 12 h (au moins ${Math.round(CONFIG.couvertureMin * 100)} % de tes heures couvertes)`,
+    `au moins ${duree(R.reposMin)} de repos entre deux quarts ; moins de ${duree(R.quickChange)} = quick change (permis, marqué « quick change »), au plus ${R.quickChangeParCycle} par cycle`,
+    `au plus ${R.joursEnLigne} jours de suite (une nuit compte pour ses deux jours)`,
+    `après ${R.nuitsJourCongé} nuits ou plus : jour de congé complet avant un quart de jour ou de soir (après 1 ou 2 nuits : déconseillé)`,
+    'jour pas encore publié : seulement le cycle 5-4, rien d\'autre n\'est vérifié',
+    'ordre d\'appel : le même que la liste d\'appel de la page Heures d\'OT (le moins d\'heures d\'OT de l\'année OT en premier, OT prévus à l\'horaire compris) ; les conditions et un solde négatif au-delà du maximum de la période s\'affichent sans changer l\'ordre (des congés comp ou 699 peuvent débloquer des heures) ; une paire de 12 h vient au rang de la personne appelée le plus tard',
+  ].map(t => `<li>${esc(t)}</li>`).join('');
+})();
+
+/* =====================================================================================
+   Chargement (fetch puis JSONP), avec une copie gardée dans le navigateur
+   ===================================================================================== */
+function lire(quoi, ok, ko) {
+  const u = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + 'type=equipe' + (quoi ? '&quoi=' + quoi : '');
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+  fetch(u + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store', signal: ctl.signal })
+    .then(r => r.json()).then(d => { clearTimeout(t); if (!ok(d)) throw 0; })
+    .catch(() => {
+      clearTimeout(t);
+      const cb = '__comp' + quoi + Date.now(), s = document.createElement('script');
+      const fin = () => { delete window[cb]; s.remove(); };
+      window[cb] = d => { fin(); if (!ok(d)) ko(); };
+      s.onerror = () => { fin(); ko(); };
+      s.src = u + '&callback=' + cb; document.head.appendChild(s);
+    });
+}
+// « 15 nov. à 10 h 47 » from 'yyyy-MM-dd HH:mm'
+const quandESS = s => fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + (s.length >= 16 ? ` à ${+s.slice(11, 13)} h ${s.slice(14, 16)}` : '');
+function etat() {
+  const e = document.getElementById('etat');
+  if (!S.data) return;
+  e.innerHTML = (CONFIG.url ? '' : '<b class="err">Données d\'exemple</b> · ') +
+    (S.data.horizon ? `Horaire publié jusqu'au ${fmt(S.data.horizon, { day: 'numeric', month: 'long' })}` : '') +
+    (S.data.ess ? ` · dernière mise à jour ESS : ${esc(quandESS(S.data.ess))}` : S.data.at ? ` · mis à jour ${esc(S.data.at)}` : '') + (S.cyc ? '' : ' · <span class="err">cycles 5-4 indisponibles</span>');
+}
+function pret() { construire(); etat(); afficherCal(); afficherRes(); }
+const rafraichir = () => { if (S.data) { afficherCal(); afficherRes(); } };
+function garderFeries(f) {
+  if (!f || !Array.isArray(f.feries)) return false;
+  S.feries = Object.fromEntries(f.feries); S.relache = Array.isArray(f.relache) ? f.relache : [];
+  rafraichir(); return true;
+}
+function garderBesoins(b) { if (!b || !b.base) return false; S.besoins = b; rafraichir(); return true; }
+function garderTS(t) { if (!t || !Array.isArray(t.gens) || !Array.isArray(t.periodes)) return false; S.ts = t; rafraichir(); return true; }
+function charger() {
+  if (!CONFIG.url) { const d = demo(); S.data = d.data; S.cyc = d.cyc; S.besoins = d.besoins; S.ts = d.ts; garderFeries(d.feries); pret(); return; }
+  try {
+    const d = JSON.parse(mem.get('data') || 'null'), c = JSON.parse(mem.get('cyc') || 'null');
+    garderFeries(JSON.parse(mem.get('feries') || 'null')); garderBesoins(JSON.parse(mem.get('besoins') || 'null'));
+    garderTS(JSON.parse(mem.get('ts') || 'null'));
+    if (d && d.q) { S.data = d; S.cyc = c; pret(); }
+  } catch (e) { /* cache illisible */ }
+  lire('', d => { if (!d || !d.q) return false; S.data = d; mem.set('data', JSON.stringify(d)); pret(); return true; },
+    () => { if (!S.data) document.getElementById('etat').innerHTML = '<span class="err">Impossible de charger l\'horaire. Réessaie dans quelques minutes.</span>'; });
+  lire('cycles', c => { if (!c || !c.debut) return false; S.cyc = c; mem.set('cyc', JSON.stringify(c)); if (S.data) pret(); return true; }, () => etat());
+  lire('feries', f => { if (!garderFeries(f)) return false; mem.set('feries', JSON.stringify(f)); return true; }, () => {});
+  lire('besoins', b => { if (!garderBesoins(b)) return false; mem.set('besoins', JSON.stringify(b)); return true; }, () => {});
+  lire('ts', t => { if (!garderTS(t)) return false; mem.set('ts', JSON.stringify(t)); return true; }, () => {});
+}
+
+/* ---------- données d'exemple (initiales fictives Q…) quand CONFIG.url est vide ---------- */
+function demo() {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const from = addDays(AUJ, -35), to = addDays(AUJ, 45);
+  const codes = ['0545', '0615', '0615', '1000', '1100', '1100', '1330', '1330', '1415', '1415', '1515', '2300', '2215', '0615'];
+  const fins = { '0545': '1430', '0615': '1500', '1000': '1845', '1100': '1945', '1330': '2215', '1415': '2300',
+                 '1515': '0000', '2300': '0745', '2215': '0700' };
+  const gens = 'QA QB QC QD QE QF QG QH QJ QK QL QM QN QP QR QS QT QU QV QW QX QY'.split(' ');
+  const q = {}, c = {};
+  gens.forEach((w, i) => {
+    q[w] = []; c[w] = [];
+    for (let d = from, k = 0; d <= to; d = addDays(d, 1), k++) {
+      const pos = (k + i * 2) % 9, bloc = Math.floor((k + i * 2) / 9);
+      if (pos < 5) {
+        if (rnd() < 0.05) { c[w].push(d); continue; }
+        const a = codes[(i * 5 + bloc * 3) % codes.length], sup = i % 7 === 3 ? 2 : 0;
+        if (rnd() < 0.04) q[w].push([d, a, fins[a], sup | 4, 'Formation OJT']);
+        else if (rnd() < 0.05) q[w].push([d, '1900', '0700', 0]);
+        else q[w].push([d, a, fins[a], sup]);
+      } else if (rnd() < 0.06) { const a = ['0615', '1330', '1100'][Math.floor(rnd() * 3)]; q[w].push([d, a, fins[a], 1]); }
+    }
+  });
+  const cyc = { debut: from, gens: gens.map((w, i) => [w, (((1 - 2 * i) % 9) + 9) % 9 || 9, i % 7 === 3 ? 1 : 0, 0]) };
+  const y = AUJ.slice(0, 4);
+  const feries = { feries: [[`${y}-12-25`, 'Noël'], [`${y}-12-26`, 'Boxing Day'], [`${+y + 1}-01-01`, "Jour de l'An"]],
+                   relache: [[addDays(AUJ, 50), addDays(AUJ, 65), 'Relâche (exemple)']] };
+  const t = { '545': 1, '615': 3, '1000': 1, '1100': 2, '1330': 2, '1415': 1, '1515': 1, '2215': 1, '2300': 1 };
+  const besoins = { base: { week: t, sat: Object.assign({}, t, { '615': 2 }), sun: Object.assign({}, t, { '615': 2, '1000': 0 }) }, changes: [] };
+  const p0 = addDays(AUJ, -27), ts = { at: AUJ + ' 06:00', max: 40, annee: { debut: addDays(AUJ, -27), auto: true, moyenne: 30 },
+    periodes: [{ debut: p0, fin: addDays(p0, 62) }, { debut: addDays(p0, 63), fin: addDays(p0, 125) }],
+    gens: gens.map((w, i) => ({ i: w, an: ((i * 37) % 23) * 4.25, aj: 0, rang: null,
+      p: [[i % 5 === 2 ? 34 : (i % 4) * 4.25, 0], [0, 0]], st: w >= 'QX' ? 1 : 0, cp: 0 })) };
+  return { data: { at: AUJ + ' 15:19', ess: AUJ + ' 10:47', horizon: to, gens, q, c, stag: ['QX', 'QY'], libres: [[addDays(AUJ, 3), '0615', '1500', '615', 1]] },
+           cyc, feries, besoins, ts };
+}
+
+charger();
+</script>
+</body>
+</html>

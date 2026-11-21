@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heures d'OT — St-Laurent</title>
+<!--
+  HEURES D'OT — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé).
+  Lit …/exec?type=equipe&quoi=ts (application Web de l'Admin. Worksheet, onglet « Heures OT ») :
+    - liste d'appel : heures d'OT de l'année OT, faites et prévues à l'horaire, le moins d'heures en premier ;
+    - période en cours (et la suivante) : maximum par personne moins les OT faits et prévus.
+  Les heures viennent des OT ($) des calendriers ESS, plus les ajustements entrés dans l'onglet.
+  Par défaut, tout le monde est affiché ; « Tout le monde ▾ » permet de cocher des personnes (comme dans l'horaire).
+-->
+<style>
+  :root { --fg: #3c4043; --muted: #70757a; --line: #dadce0; --soft: #f1f3f4; --bg: #fff; --accent: #1a73e8;
+          --ok: #188038; --w: #b06000; --x: #c5221f; --bar: #5fb8d6;
+          font-family: Roboto, "Segoe UI", Arial, sans-serif; font-size: 14px; color: var(--fg); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); }
+  button, select { font: inherit; color: inherit; }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
+  header label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .btn { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 5px 14px; cursor: pointer;
+         font-weight: 500; }
+  .btn:hover { background: var(--soft); }
+  .filtre { font-size: 12px; color: var(--muted); margin: -4px 0 8px; }
+  .filtre button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
+  /* people picker (same as the team calendar) */
+  #popbg { position: fixed; inset: 0; z-index: 50; }
+  #popbg.sheet { background: rgba(32, 33, 36, .35); }
+  .pop { position: fixed; z-index: 51; width: 340px; background: var(--bg); border-radius: 8px; border-top: 4px solid var(--accent);
+         box-shadow: 0 6px 24px rgba(0, 0, 0, .22); padding: 12px 14px 14px; font-size: 13px; }
+  /* phones: opens right under the button (the Wix embed is very tall, so a bottom sheet would be off-screen) */
+  .pop.sheet { position: absolute; left: 8px !important; right: 8px; bottom: auto; width: auto;
+               border-radius: 12px; padding: 14px 16px 16px; font-size: 15px; }
+  .pop .x { position: absolute; top: 4px; right: 4px; border: 0; background: none; font-size: 22px; line-height: 1;
+            color: var(--muted); cursor: pointer; padding: 6px 10px; }
+  .pop h3 { margin: 0 28px 2px 0; font-size: 17px; font-weight: 500; }
+  .pop .dt { color: var(--muted); margin-bottom: 8px; }
+  .pop .choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px;
+                max-height: 46vh; overflow-y: auto; margin-top: 4px; }
+  .pop .choix label { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px;
+                      background: var(--soft); cursor: pointer; font-weight: 500; user-select: none; }
+  .pop .choix label:has(input:checked) { background: #d3e2fc; color: #0b3a8c; }
+  .pop .choix input { margin: 0; }
+  .pop .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .pop .btns button { border: 1px solid var(--line); background: var(--bg); border-radius: 18px; padding: 5px 12px;
+                      cursor: pointer; font-size: 13px; color: var(--accent); }
+  .pop .btns button:hover { background: #f6f9fe; }
+  .pop.sheet .btns button { flex: 1 1 auto; padding: 11px 14px; font-size: 15px; }
+  .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
+  main { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+  section { overflow: auto; padding: 12px 16px 20px; }
+  section + section { border-left: 1px solid var(--line); }
+  h2 { font-size: 16px; font-weight: 500; color: #202124; margin: 2px 0 2px; }
+  .sous { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+       padding: 4px 6px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
+  td { padding: 5px 6px; border-bottom: 1px solid #f0f1f2; font-size: 13px; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.rang { width: 38px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  td.ini b { color: #202124; }
+  .barre { position: relative; height: 8px; border-radius: 4px; background: var(--soft); min-width: 60px; }
+  .barre i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--bar); }
+  .barre i.p { background: repeating-linear-gradient(-45deg, #b9e0ee 0 3px, #d6eef6 3px 6px); }   /* planned OT */
+  td.n small { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .leg { display: inline-block; width: 18px; height: 8px; border-radius: 4px; vertical-align: middle; margin: 0 3px 1px; }
+  .tag.neg { color: var(--x); border-color: #f2b8b5; font-weight: 600; }
+  .tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; margin-left: 6px; white-space: nowrap; }
+  .ok { color: var(--ok); } .w { color: var(--w); font-weight: 500; } .x { color: var(--x); font-weight: 600; }
+  .note { font-size: 12px; color: var(--muted); background: #f8f9fa; border-radius: 8px; padding: 8px 10px; margin-top: 12px; line-height: 1.5; }
+  /* period navigation: ‹ previous · current · next › */
+  .nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .nav button { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg);
+                font-size: 20px; line-height: 1; color: var(--accent); cursor: pointer; }
+  .nav button:hover:not(:disabled) { background: #f6f9fe; }
+  .nav button:disabled { color: #c4c7c5; cursor: default; }
+  .nav .lib { flex: 1; text-align: center; line-height: 1.3; }
+  .nav .lib b { display: block; font-weight: 500; color: #202124; }
+  .nav .lib span { font-size: 12px; color: var(--muted); }
+  .nav .lib span.cours { color: var(--ok); font-weight: 500; }
+  .points { display: flex; justify-content: center; gap: 5px; margin: -4px 0 10px; }
+  .points i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); cursor: pointer; }
+  .points i.on { background: var(--accent); } .points i.cours { box-shadow: 0 0 0 2px #ceead6; }
+  .vide { color: var(--muted); padding: 30px 10px; text-align: center; }
+  .err { color: var(--x); }
+  @media (max-width: 760px) {
+    html, body { height: auto; } #app { height: auto; } main { display: block; }
+    section { overflow: visible; } section + section { border-left: 0; border-top: 1px solid var(--line); }
+    .etat { margin-left: 0; width: 100%; }
+    .barre { min-width: 36px; }
+    td.ini .tag { display: inline-block; white-space: normal; margin: 2px 4px 0 0; }
+    #periode td.n, #periode th.n { white-space: nowrap; padding-left: 3px; padding-right: 3px; font-size: 12.5px; }
+    /* phones: one list at a time (call list or period), so the Wix box stays a reasonable height */
+    .onglets { display: flex; gap: 6px; padding: 10px 16px 0; border-bottom: 1px solid var(--line); }
+    .onglets button { flex: 1; border: 0; border-bottom: 3px solid transparent; background: none; padding: 8px 4px 9px;
+                      font-weight: 500; color: var(--muted); cursor: pointer; }
+    .onglets button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+    body[data-onglet="appel"] #periode, body[data-onglet="periode"] #appel { display: none; }
+    section + section { border-top: 0; }
+  }
+  th.tri { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.tri:hover { color: var(--fg); }
+  th.tri.on { color: var(--accent); }
+  th.tri .fl { font-size: 10px; }
+  th.barre-t { font-weight: 400; font-size: 11px; }
+  @media (max-width: 420px) { #appel th.tri { white-space: normal; } }
+  .onglets { display: none; }
+  @media (max-width: 760px) { .onglets { display: flex; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Heures d'OT</h1>
+    <button class="btn" id="who" aria-haspopup="dialog" title="Choisir les personnes à afficher">Tout le monde ▾</button>
+    <span class="etat" id="etat">Chargement…</span>
+  </header>
+  <nav class="onglets" aria-label="Section">
+    <button data-onglet="appel">Liste d'appel</button><button data-onglet="periode">Période</button>
+  </nav>
+  <main>
+    <section id="appel"><div class="vide">Chargement…</div></section>
+    <section id="periode"></section>
+  </main>
+</div>
+<div id="popbg" hidden></div>
+<div id="pop" class="pop" role="dialog" aria-modal="true" hidden></div>
+<script>
+const CONFIG = {
+  // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
+  url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
+  quartOT: 8.5,             // un quart complet en OT (heures) : sert à colorer le « reste »
+  avis: { minMois: 1, maxMois: 12, sansFinMois: 3 },   // « congé à venir » : annoncé aussi longtemps d'avance qu'il dure
+                            // (6 mois de congé = 6 mois d'avance), au moins minMois, au plus maxMois ; sans date de fin : sansFinMois
+};
+// « congé à venir » is announced as long before it starts as it lasts (a 6-month leave shows 6 months ahead),
+// at least CONFIG.avis.minMois, at most maxMois; a leave with no end date: sansFinMois.
+function congeAnnonce(debut, fin) {
+  if (!debut) return true;
+  const n = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+  const x = new Date(), auj = Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / 864e5;
+  const M = 30.44, A = CONFIG.avis;
+  const avis = fin ? Math.min(A.maxMois * M, Math.max(A.minMois * M, n(fin) - n(debut) + 1)) : A.sansFinMois * M;
+  return n(debut) - auj <= avis;
+}
+// leave tag of one person: on leave now → « congé prolongé », else the first upcoming leave already announced
+// clickable column headers (click again to reverse); remembered. Period table: S.tri / data-tri;
+// call list: S.triA / data-tria
+function entete(col, txt, cls, t = S.tri, attr = 'tri', titre = txt.toLowerCase()) {
+  const on = t.col === col, fl = on ? (t.dir > 0 ? ' ▲' : ' ▼') : '';
+  return `<th class="${cls} tri${on ? ' on' : ''}" data-${attr}="${col}" aria-sort="${on ? (t.dir > 0 ? 'ascending' : 'descending') : 'none'}"` +
+    ` title="Trier par ${titre}">${txt}<span class="fl">${fl}</span></th>`;
+}
+
+function tagConge(g) {
+  const x = new Date(), a = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const l = g.cg || (g.cp ? [['', g.cpf]] : g.cpd ? [[g.cpd, g.cpf]] : []);   // g.cg: all current/upcoming leaves (script)
+  const cur = l.find(([d, f]) => (!d || d <= a) && (!f || f >= a));
+  if (cur) return `<span class="tag">congé prolongé${cur[1] ? ` · jusqu'au ${jm(cur[1])}` : ''}</span>`;
+  const p = l.filter(([d, f]) => d > a && congeAnnonce(d, f)).sort((u, v) => (u[0] < v[0] ? -1 : 1))[0];
+  return p ? `<span class="tag" title="Congé prolongé ou fin de contrat">congé à venir · ${jm(p[0])}${p[1] ? ` – ${jm(p[1])}` : ''}</span>` : '';
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o))
+  .format(new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))));
+const jm = d => fmt(d, { day: 'numeric', month: 'short' });
+const h = x => (Math.round(x * 100) / 100).toLocaleString('fr-CA', { maximumFractionDigits: 2 });
+const mem = {
+  get(k) { try { return localStorage.getItem('ot.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('ot.' + k, v); } catch (e) { /* pas de stockage */ } },
+};
+// sel = ticked people (empty = everyone), kept in the browser like the team calendar
+// per = index of the period shown in T.periodes (oldest first); null = the current one
+const S = { ts: null, sel: (mem.get('sel') || '').split(',').filter(Boolean), per: null, tri: { col: 'i', dir: 1 },
+            triA: { col: 'r', dir: 1 } };
+try { const t = JSON.parse(mem.get('triA') || 'null'); if (t && 'ritp'.includes(t.col) && Math.abs(t.dir) === 1) S.triA = t; } catch (e) { /* default */ }
+try { const t = JSON.parse(mem.get('tri') || 'null'); if (t && 'ifpar'.includes(t.col) && Math.abs(t.dir) === 1) S.tri = t; } catch (e) { /* default */ }
+// hours used in period k: like ESS (all paid hours − normal hours) when available, else OT done + planned
+const utilise = (g, k) => (g.e && g.e[k] !== null && g.e[k] !== undefined ? g.e[k] : g.p[k][0] + g.p[k][1]);
+
+function afficher() {
+  const T = S.ts;
+  if (!T) return;
+  S.sel = S.sel.filter(w => T.gens.some(g => g.i === w));
+  const n = S.sel.length, vu = g => !n || S.sel.includes(g.i);
+  document.getElementById('who').textContent = (!n ? 'Tout le monde' : n <= 3 ? S.sel.join(', ') : `${n} personnes`) + ' ▾';
+  document.getElementById('etat').innerHTML = (CONFIG.url ? '' : '<b class="err">Données d\'exemple</b> · ') + `Mis à jour ${esc(T.at)}`;
+  const filtre = n ? `<div class="filtre">${n} personne${n > 1 ? 's' : ''} cochée${n > 1 ? 's' : ''} · <button data-act="tous">Voir tout le monde</button></div>` : '';
+
+  // ---- call list: fewest hours first (the order of the rank), or the clicked column (S.triA)
+  const valA = g => ({ r: g.rang || 1e9, i: g.i, t: g.an, p: g.anp || 0 })[S.triA.col];
+  const triA = (x, y) => {
+    const a = valA(x), b = valA(y);
+    return (a < b ? -1 : a > b ? 1 : 0) * S.triA.dir || x.an - y.an || (x.i < y.i ? -1 : 1);
+  };
+  const qual = T.gens.filter(g => !g.st && vu(g)).sort(triA);
+  const stag = T.gens.filter(g => g.st && vu(g)).sort(triA);
+  const max = Math.max(1, ...T.gens.map(g => g.an));
+  // bar: OT done (solid), then OT planned on the schedule (pale, striped)
+  const barre = g => {
+    const p = Math.max(0, g.anp || 0), f = Math.max(0, g.an - p), w = x => x / max * 100;
+    return `<i class="p" style="width:${Math.max(2, w(f + p))}%" title="${h(p)} h prévues"></i>` +
+      `<i style="width:${f ? Math.max(2, w(f)) : 0}%" title="${h(f)} h faites"></i>`;
+  };
+  // balance of the current period (maximum − done − planned); null when there is no maximum
+  const kc = T.cur || 0;                                   // index of the current period
+  const resteDe = g => (T.max ? Math.round((T.max - utilise(g, kc)) * 100) / 100 : null);
+  const ligne = (g, rang) => `<tr><td class="rang">${rang}</td><td class="ini"><b>${esc(g.i)}</b>` +
+    `${tagConge(g)}${g.aj ? `<span class="tag" title="Ajustement entré à la main">aj. ${h(g.aj)} h</span>` : ''}` +
+    `${resteDe(g) !== null && resteDe(g) < 0 ? `<span class="tag neg" title="Au-delà du maximum de la période en cours (calculé comme ESS)">période ${h(resteDe(g))} h</span>` : ''}</td>` +
+    `<td><div class="barre">${barre(g)}</div></td>` +
+    `<td class="n">${h(g.an)} h${g.anp ? `<small>(${h(g.anp)} h prévues)</small>` : ''}</td></tr>`;
+  let a = `<h2>Liste d'appel</h2><div class="sous">Année OT depuis le ${fmt(T.annee.debut, { day: 'numeric', month: 'long', year: 'numeric' })}` +
+    `${T.annee.auto ? ' (date automatique)' : ''} · OT faits et prévus · le moins d'heures est appelé en premier · moyenne ${h(T.annee.moyenne)} h</div>` + filtre +
+    `<table><thead><tr>${entete('r', 'Rang', 'n', S.triA, 'tria', 'rang d\'appel')}${entete('i', 'Initiales', '', S.triA, 'tria')}` +
+    `${entete('p', 'Faites / prévues', 'barre-t', S.triA, 'tria', 'heures prévues')}${entete('t', 'Heures totales', 'n', S.triA, 'tria')}</tr></thead><tbody>` +
+    (qual.length ? qual.map(g => ligne(g, g.rang)).join('') : '<tr><td colspan="4" class="vide">Aucun contrôleur qualifié coché.</td></tr>') + '</tbody></table>';
+  if (stag.length) a += '<h2 style="margin-top:16px">Stagiaires</h2><div class="sous">Appelés après les contrôleurs qualifiés.</div>' +
+    '<table><tbody>' + stag.map(g => ligne(g, '')).join('') + '</tbody></table>';
+  a += '<div class="note">Les OT déjà à l\'horaire comptent tout de suite, même s\'ils sont plus tard ' +
+    '(<span class="leg" style="background:var(--bar)"></span>faits, <span class="leg" style="background:repeating-linear-gradient(-45deg,#b9e0ee 0 3px,#d6eef6 3px 6px)"></span>prévus). ' +
+    'Un OT ajouté ou annulé dans ESS est pris en compte à la mise à jour suivante (chaque heure). Un OT peut toujours être refusé. ' +
+    'Les heures viennent des OT ($) de l\'horaire ESS ; une correction se fait dans l\'onglet « Heures OT » (colonne Ajustement).</div>';
+  document.getElementById('appel').innerHTML = a;
+
+  // ---- period: maximum minus OT done and planned
+  if (S.per === null || S.per >= T.periodes.length) S.per = kc;
+  const k = S.per, P = T.periodes[k], dern = T.periodes.length - 1;
+  const etat = P.etat || (k === kc ? 'cours' : k < kc ? 'passee' : 'suivante');
+  let quoi = etat === 'cours' ? '<span class="cours">période en cours</span>' : etat === 'passee' ? '<span>période passée</span>' : '<span>période suivante</span>';
+  if (etat === 'suivante' && T.horizon) quoi += T.horizon < P.debut ? '<span> · horaire pas encore publié</span>'
+    : T.horizon < P.fin ? `<span> · publié jusqu'au ${jm(T.horizon)}</span>` : '<span> · horaire publié</span>';
+  if (P.partiel) quoi += '<span> · historique incomplet (début de l\'historique)</span>';
+  const ess = !!P.h;                                       // period hours available (computed like ESS)
+  let p = `<h2>Maximum par période</h2><div class="sous">` +
+    (T.max ? `Maximum de <b>${h(T.max)} h</b> en plus des heures normales (${h(T.normales || 306.25)} h) par personne dans une période. ` : 'Le maximum par période n\'est pas encore inscrit. ') +
+    'Faites / Prévues = OT ($) ; prévues = déjà à l\'horaire publié.' +
+    (ess ? ' <b>Reste : calculé comme ESS</b>, avec toutes les heures payées de la période (quarts, OT, vacances, maladie, comp…) ; ' +
+      'les congés sans solde ou autofinancés ne comptent pas. Autres = heures payées en plus qui ne sont pas de l\'OT (échange, formation…) ; ' +
+      'négatif = un quart de moins.'
+      : ' Ici, le reste ne compte que l\'OT (horaire pas publié au complet ou historique incomplet).') +
+    '</div>' + filtre +
+    `<div class="nav"><button data-nav="-1" ${k === 0 ? 'disabled' : ''} aria-label="Période précédente" title="Période précédente">‹</button>` +
+    `<div class="lib"><b>${jm(P.debut)} – ${fmt(P.fin, { day: 'numeric', month: 'short', year: 'numeric' })}</b>${quoi}</div>` +
+    `<button data-nav="1" ${k === dern ? 'disabled' : ''} aria-label="Période suivante" title="Période suivante">›</button></div>` +
+    (T.periodes.length > 2 ? '<div class="points">' + T.periodes.map((x, i) => `<i data-p="${i}" class="${i === k ? 'on' : ''} ${i === kc ? 'cours' : ''}" title="${jm(x.debut)} – ${jm(x.fin)}"></i>`).join('') + '</div>' : '') +
+    `<table><thead><tr>${entete('i', 'Initiales', '')}${entete('f', 'Faites', 'n')}${entete('p', 'Prévues', 'n')}` +
+    `${ess ? entete('a', 'Autres', 'n') : ''}${T.max ? entete('r', etat === 'passee' ? 'Non utilisé' : 'Reste', 'n') : ''}</tr></thead><tbody>`;
+  // sort by the clicked column (S.tri), ties by initials
+  const autres = g => (ess ? Math.round((utilise(g, k) - g.p[k][0] - g.p[k][1]) * 100) / 100 : 0);
+  const val = g => ({ i: g.i, f: g.p[k][0], p: g.p[k][1], a: autres(g), r: T.max ? T.max - utilise(g, k) : 0 })[S.tri.col];
+  const lignes = T.gens.filter(vu).sort((x, y) => {
+    const a = val(x), b = val(y);
+    return (a < b ? -1 : a > b ? 1 : 0) * S.tri.dir || (x.i < y.i ? -1 : 1);
+  });
+  for (const g of lignes) {
+    const [f, pv] = g.p[k], reste = T.max ? Math.round((T.max - utilise(g, k)) * 100) / 100 : null, au = autres(g);
+    const cls = reste === null ? '' : reste <= 0 ? 'x' : reste < CONFIG.quartOT ? 'w' : 'ok';
+    p += `<tr><td class="ini"><b>${esc(g.i)}</b>${g.st ? '<span class="tag">stagiaire</span>' : ''}</td>` +
+      `<td class="n">${f ? h(f) + ' h' : '—'}</td><td class="n">${pv ? h(pv) + ' h' : '—'}</td>` +
+      (ess ? `<td class="n">${au ? (au > 0 ? '+' : '') + h(au) + ' h' : '—'}</td>` : '') +
+      (T.max ? `<td class="n ${cls}">${h(reste)} h</td>` : '') + '</tr>';
+  }
+  p += '</tbody></table>';
+  if (T.max) p += `<div class="note"><span class="w">Orange</span> : moins d'un quart complet d'OT (${h(CONFIG.quartOT)} h) disponible. ` +
+    '<span class="x">Rouge</span> : maximum atteint ou dépassé.<br>Un solde négatif est possible : les congés comp et 699 (autre congé payé) ' +
+    'débloquent des heures, mais l\'horaire ESS les montre comme de simples congés. Chaque personne vérifie son solde négatif ' +
+    'avec ses congés admissibles. Pour le comp, plus le solde est négatif, plus la personne passe tard.</div>';
+  document.getElementById('periode').innerHTML = p;
+}
+
+/* « Tout le monde ▾ » : cocher des personnes, comme dans l'horaire. Aucune case = tout le monde. */
+function choisir(liste) {
+  S.sel = liste.filter((w, i) => liste.indexOf(w) === i);
+  mem.set('sel', S.sel.join(','));
+  afficher();
+}
+function ouvrirPop(el) {
+  if (!S.ts) return;
+  const pop = document.getElementById('pop'), bg = document.getElementById('popbg'), sheet = innerWidth < 640;
+  const cases = S.ts.gens.map(g => g.i).sort()
+    .map(w => `<label><input type="checkbox" data-w="${esc(w)}"${S.sel.includes(w) ? ' checked' : ''}>${esc(w)}</label>`).join('');
+  pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button><h3>Personnes à afficher</h3>' +
+    '<div class="dt">Cochez une ou plusieurs personnes. Aucune case = tout le monde.</div>' +
+    `<div class="choix">${cases}</div><div class="btns"><button data-act="tous">Tout le monde</button><button data-act="fermer">OK</button></div>`;
+  pop.classList.toggle('sheet', sheet); bg.classList.toggle('sheet', sheet);
+  bg.hidden = false; pop.hidden = false;
+  const r = el.getBoundingClientRect();
+  if (sheet) { pop.style.left = ''; pop.style.top = (r.bottom + scrollY + 6) + 'px'; }
+  else {
+    const w = pop.offsetWidth;
+    pop.style.left = Math.min(Math.max(8, r.left), innerWidth - w - 8) + 'px'; pop.style.top = (r.bottom + 6) + 'px';
+  }
+}
+function fermerPop() { document.getElementById('pop').hidden = true; document.getElementById('popbg').hidden = true; }
+document.getElementById('who').onclick = e => ouvrirPop(e.currentTarget);
+document.getElementById('popbg').onclick = fermerPop;
+document.getElementById('pop').addEventListener('change', e => {
+  if (e.target.matches('.choix input')) choisir([...document.querySelectorAll('#pop .choix input:checked')].map(i => i.dataset.w));
+});
+document.getElementById('pop').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  fermerPop(); if (b.dataset.act === 'tous') choisir([]);
+});
+// phones: tabs « Liste d'appel » / « Période » (remembered)
+function onglet(o) {
+  document.body.dataset.onglet = o; mem.set('onglet', o);
+  document.querySelectorAll('.onglets button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.onglet === o)));
+}
+onglet(mem.get('onglet') === 'periode' ? 'periode' : 'appel');
+document.getElementById('app').addEventListener('click', e => {
+  // tab buttons only (body[data-onglet] marks the open tab and would match every click)
+  const o = e.target.closest('.onglets [data-onglet]'); if (o) { onglet(o.dataset.onglet); window.scrollTo(0, 0); return; }
+  const ta = e.target.closest('[data-tria]');
+  if (ta) {
+    const col = ta.dataset.tria;
+    S.triA = S.triA.col === col ? { col, dir: -S.triA.dir } : { col, dir: col === 'p' ? -1 : 1 };
+    mem.set('triA', JSON.stringify(S.triA)); afficher(); return;
+  }
+  const tr = e.target.closest('[data-tri]');
+  if (tr) {
+    const col = tr.dataset.tri;   // same column: reverse; new column: initials A→Z, numbers biggest first
+    S.tri = S.tri.col === col ? { col, dir: -S.tri.dir } : { col, dir: col === 'i' ? 1 : -1 };
+    mem.set('tri', JSON.stringify(S.tri)); afficher(); return;
+  }
+  const t = e.target.closest('[data-act="tous"]'); if (t) { choisir([]); return; }
+  const n = e.target.closest('[data-nav]'); if (n && !n.disabled) { S.per += +n.dataset.nav; afficher(); return; }
+  const b = e.target.closest('[data-p]'); if (b) { S.per = +b.dataset.p; afficher(); }
+});
+
+function garder(d) { if (!d || !Array.isArray(d.gens) || !d.annee) return false; S.ts = d; afficher(); return true; }
+function charger() {
+  if (!CONFIG.url) { garder(demo()); return; }
+  try { garder(JSON.parse(mem.get('data') || 'null')); } catch (e) { /* cache illisible */ }
+  const u = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + 'type=equipe&quoi=ts';
+  const ko = () => { if (!S.ts) { document.getElementById('etat').innerHTML = '<span class="err">Heures d\'OT indisponibles pour le moment.</span>';
+    document.getElementById('appel').innerHTML = '<div class="vide">Heures d\'OT indisponibles. Réessaie dans quelques minutes.</div>'; } };
+  fetch(u + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store' }).then(r => r.json())
+    .then(d => { if (!garder(d)) throw 0; mem.set('data', JSON.stringify(d)); })
+    .catch(() => {
+      const cb = '__ot' + Date.now(), s = document.createElement('script');
+      window[cb] = d => { delete window[cb]; s.remove(); if (garder(d)) mem.set('data', JSON.stringify(d)); else ko(); };
+      s.onerror = () => { s.remove(); ko(); };
+      s.src = u + '&callback=' + cb; document.head.appendChild(s);
+    });
+}
+function demo() {
+  const gens = 'QA QB QC QD QE QF QG QH QJ QK QL QM QN QP QR QS QT QU QV QW QX QY'.split(' ').map((w, i) => {
+    const an = Math.round(((i * 37) % 23) * 4.25 * 4) / 4;
+    const p = [[(i * 5) % 7 * 8.5, 0], [(i * 3) % 9 * 8.5, 0], [(i * 7) % 4 * 4.25, (i % 3) * 8.5], [0, (i % 2) * 8.5]];
+    const e = p.map((x, k) => (k === 1 || k === 2 ? x[0] + x[1] + [0, 8.75, -8.75, 0, 0][i % 5] : null));
+    return { i: w, an, anp: i % 3 === 1 ? Math.min(an, 8.5) : 0, aj: i === 4 ? 8.5 : 0, p, e, st: w >= 'QX' ? 1 : 0, cp: w === 'QM' ? 1 : 0, cpd: w === 'QR' ? '2026-12-21' : '', cpf: w === 'QR' ? '2027-03-07' : w === 'QM' ? '2027-01-31' : '' };
+  });
+  const q = gens.filter(g => !g.st).sort((a, b) => a.an - b.an);
+  q.forEach((g, k) => { g.rang = k && g.an === q[k - 1].an ? q[k - 1].rang : k + 1; });
+  return { at: '2026-11-15 12:00', max: 40, annee: { debut: '2026-10-19', auto: true, moyenne: 40.5 },
+           periodes: [{ debut: '2026-06-15', fin: '2026-08-16', etat: 'passee', partiel: 1 }, { debut: '2026-08-17', fin: '2026-10-18', etat: 'passee', h: 1 },
+                      { debut: '2026-10-19', fin: '2026-12-20', etat: 'cours', h: 1 }, { debut: '2026-12-21', fin: '2027-02-21', etat: 'suivante' }],
+           cur: 2, horizon: '2026-12-20', normales: 306.25, gens };
+}
+charger();
+</script>
+</body>
+</html>

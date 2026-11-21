@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vacances — St-Laurent</title>
+<!--
+  VACANCES — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé), sur sa propre page.
+  - Copie en direct de l'onglet « Sélection » du fichier « Vacances 2027-2028 St-Laurent » (lecture seule) : choix de
+    chacun par tour, places restantes par jour, overlaps, tour en cours et à qui c'est le tour.
+  - « Ma demande » : la personne clique ses cycles dans sa rangée et envoie sa demande (code personnel). À son tour,
+    elle est inscrite tout de suite dans la feuille et son ✓ est coché ; avant son tour, elle attend en file et
+    s'inscrit d'elle-même quand son tour arrive ; si elle ne respecte pas une règle, UK décide. UK reçoit une copie
+    par courriel (et une ligne dans l'onglet « Demandes (site) »).
+  Lit …/exec?type=equipe&quoi=vacances et envoie …/exec?type=equipe&quoi=vac_demande (application Web de l'Admin. Worksheet).
+-->
+<style>
+  :root { --fg: #3c4043; --muted: #70757a; --line: #dadce0; --soft: #f1f3f4; --bg: #fff; --accent: #1a73e8;
+          --ok: #188038; --wait: #b06000; --x: #c5221f; --off: #e3e5e8; --cw: 22px;
+          font-family: Roboto, "Segoe UI", Arial, sans-serif; font-size: 14px; color: var(--fg); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
+  .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .etat button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0 0 0 6px; }
+  .err { color: var(--x); }
+  .barre { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .onglets { display: inline-flex; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .onglets button { border: 0; background: #fff; padding: 5px 14px; cursor: pointer; }
+  .onglets button.on { background: #e8f0fe; color: #174ea6; font-weight: 500; }
+  label.moi select { margin-left: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .mois { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mois button { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--muted); }
+  .mois button:hover { color: var(--fg); border-color: #bdc1c6; }
+  .plein { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 12px; cursor: pointer; color: var(--accent); }
+  .plein:hover { background: #f1f6fe; }
+  body.seul .grille { max-height: calc(100vh - 120px); }
+
+  .tour { margin: 12px 16px 6px; padding: 10px 12px; border-radius: 8px; background: #f8f9fa; border: 1px solid var(--line); line-height: 1.55; }
+  .tour b.qui { font-size: 16px; color: #202124; }
+  .tour .regle { color: var(--muted); font-size: 13px; }
+  .tour .suivants { font-size: 12.5px; color: var(--muted); }
+  .tour.moi-tour { background: #e6f4ea; border-color: #b7dfc3; }
+
+  /* the grid: sticky left columns and header rows */
+  .grille { position: relative; overflow: auto; max-height: 72vh; margin: 8px 16px 0; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: separate; border-spacing: 0; font-size: 11.5px; }
+  th, td { padding: 0; height: 22px; text-align: center; white-space: nowrap; border-right: 1px solid #edeef0; border-bottom: 1px solid #edeef0; }
+  td.j, th.j { width: var(--cw); min-width: var(--cw); max-width: var(--cw); }
+  thead th { position: sticky; background: #fff; z-index: 2; font-weight: 400; color: var(--muted); }
+  thead tr.m th { top: 0; height: 20px; color: #202124; font-weight: 500; text-align: left; padding-left: 4px; border-left: 1px solid var(--line); }
+  thead tr.n th { top: 20px; }
+  thead tr.w th { top: 42px; font-size: 10px; }
+  /* same colours as the Sélection tab */
+  th.we { background: #c4ecdc; }
+  th.fer { background: #f4cccc; color: #202124; font-weight: 700; }
+  th.rel { background: #ebddf7; color: #5b2a85; }
+  th.cj { background: #ffe499; color: #202124; font-weight: 700; }
+  th.cr { background: #df6666; color: #fff; }
+  .g { position: sticky; z-index: 1; background: #fff; text-align: left; padding: 0 6px; }
+  thead .g { z-index: 3; }
+  .g0 { left: 0; width: 44px; min-width: 44px; color: var(--muted); }
+  .g1 { left: 44px; width: 40px; min-width: 40px; font-weight: 600; color: #202124; }
+  .g2 { left: 84px; width: 38px; min-width: 38px; text-align: right; }
+  .g3 { left: 122px; width: 44px; min-width: 44px; text-align: right; }
+  .g4 { left: 166px; width: 38px; min-width: 38px; text-align: right; border-right: 1px solid #bdc1c6; }
+  tr.p:hover td.g { background: #f8f9fa; }
+  tr.p.tour td.g { background: #cfe2f3; font-weight: 700; }
+  tr.p.fini td.g1::after { content: ' ✓'; color: var(--ok); font-weight: 400; }
+  tr.p.form td.g { color: #b0b4b8; }
+  td.g.neg { color: #df6666; font-weight: 700; }
+  tr.p td.g.ovneg { background: #df6666; color: #fff; font-weight: 700; }
+  td.g.ov0 { color: #999; }
+  td.j { background: #fff; color: #202124; }
+  td.j.tr { background: #deeaf6; }                 /* whose turn */
+  td.j.off { background: #d9d9d9; }                /* day off (5-4 cycle) */
+  td.j.cj { background: #fff1cc; }                 /* day at the maximum */
+  td.j.cr { background: #df6666; }                 /* over the maximum (overlap used) */
+  td.j.v { background: #6aa84f; font-weight: 700; }
+  td.j.vt { background: #df6666; font-weight: 700; }
+  td.j.vm { background: #df6666; color: #fff; font-weight: 700; }   /* this person's overlap */
+  td.j.vo { background: #ff9900; font-weight: 700; }                /* picked on a day off: check */
+  td.j.ech { background: #d9d9d9; font-weight: 700; font-size: 9px; letter-spacing: -.2px; }
+  td.j.pour { font-size: 7.5px; color: #555; text-align: left; vertical-align: top; padding: 2px 0 0 2px; line-height: 1; }
+  /* my row: framed in blue, my picks not yet in the sheet hatched */
+  tr.moi td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+  tr.moi td.j.cl { cursor: pointer; }
+  tr.moi td.j.cl:hover { box-shadow: inset 0 0 0 2px var(--accent); }
+  tr.moi td.j.sel { background: repeating-linear-gradient(135deg, #b6d7a8 0 4px, #e2f0d9 4px 8px); box-shadow: inset 0 0 0 2px #38761d; }
+  tr.moi td.j.sel.ovp { box-shadow: inset 0 0 0 2px #df6666; }
+  tr.moi td.j.sel.ko { background: repeating-linear-gradient(135deg, #f4b4b4 0 4px, #fce8e6 4px 8px); box-shadow: inset 0 0 0 2px #df6666; }
+  tr.sep td { height: 6px; border: 0; background: #fff; }
+  tr.tot td.g { color: var(--muted); font-weight: 400; }
+  tr.tot td.j { font-size: 10.5px; color: var(--muted); }
+  tr.tot td.j.cj { background: #ffe499; color: #202124; font-weight: 700; }
+  tr.tot td.j.cr { background: #df6666; color: #202124; font-weight: 700; }
+  tr.tot td.j.crb { background: #df6666; color: #fff; font-weight: 700; }
+  tr.ovl td.j.crb { font-size: 8.5px; }
+  td.mdeb, th.mdeb { border-left: 1px solid #bdc1c6; }
+
+  .leg { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 16px 0; font-size: 12px; color: var(--muted); }
+  .leg i { display: inline-block; width: 14px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 4px; }
+
+  /* my request */
+  .dem { margin: 14px 16px 24px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
+  .dem h2 { font-size: 16px; font-weight: 500; color: #202124; margin: 0 0 6px; }
+  .dem .aide { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .dem .avis { margin: 8px 0; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+  .avis.w { background: #fef7e0; color: #7a4a00; }
+  .avis.ok { background: #e6f4ea; color: #0d652d; }
+  .avis.x { background: #fce8e6; color: #a50e0e; }
+  .mode { font-size: 13px; margin: 6px 0; }
+  .blocs { margin: 8px 0; }
+  .bloc { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 0; border-bottom: 1px solid #f0f1f2; }
+  .bloc b { color: #202124; }
+  .bloc .nb { color: var(--muted); font-size: 12.5px; }
+  .bloc .m { font-size: 12.5px; }
+  .bloc .m.w { color: var(--wait); } .bloc .m.x { color: var(--x); } .bloc .m.ok { color: var(--ok); }
+  .bloc button { margin-left: auto; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12.5px; }
+  .dem label.t { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .dem textarea { width: 100%; min-height: 44px; margin-top: 3px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .actions button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 18px; padding: 7px 16px; cursor: pointer; }
+  .actions button.sec { background: #fff; color: var(--accent); }
+  .actions button:disabled { opacity: .5; cursor: default; }
+  .actions .msg { font-size: 13px; }
+  .actions .msg.ok { color: var(--ok); } .actions .msg.x { color: var(--x); } .actions .msg.w { color: var(--wait); }
+  .code { margin: 8px 0 10px; padding: 8px 10px; border-radius: 6px; background: #fef7e0; font-size: 13.5px; }
+  .code input#codeIn { width: 5.5em; margin: 0 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; font-family: "Roboto Mono", monospace; letter-spacing: 2px; }
+  .code button, .lien { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0 4px; font: inherit; }
+  .code #codeOk { border: 1px solid var(--accent); border-radius: 14px; padding: 3px 10px; }
+  .code label.ret { margin-left: 8px; color: var(--muted); font-size: 12.5px; }
+  .code.ok { background: #e6f4ea; color: #0d652d; padding: 5px 10px; }
+  .code .msg.x { color: var(--x); font-weight: 500; }
+  .code .msg.x ~ .aide { margin-top: 2px; }
+  .code.ko input#codeIn { border-color: var(--x); box-shadow: 0 0 0 1px var(--x); }
+  .echf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13.5px; }
+  .echf input, .echf select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .echf button, .ouvrir { border: 1px solid var(--accent); background: #fff; color: var(--accent); border-radius: 16px; padding: 4px 12px; cursor: pointer; }
+  #ech h2 .ouvrir { margin-left: 8px; font-size: 13px; vertical-align: 1px; }
+  @media (max-width: 600px) {
+    .grille { max-height: none; margin: 8px 8px 0; } .tour, .dem, .leg { margin-left: 8px; margin-right: 8px; }
+    .g0, .g3 { display: none; } .g1 { left: 0; } .g2 { left: 40px; } .g4 { left: 78px; }   /* narrow: Ini., Pris, Ovlp. only */
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vacances — sélection</h1>
+  <span class="etat" id="etat">Chargement…</span>
+</header>
+<div class="barre">
+  <div class="onglets" id="onglets"></div>
+  <label class="moi">Moi : <select id="moi"><option value="">—</option></select></label>
+  <div class="mois" id="mois"></div>
+  <button class="plein" id="bPlein" hidden title="Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; Plein écran</button>
+</div>
+<div id="tour"></div>
+<div class="grille" id="grille"></div>
+<div class="leg" id="leg"></div>
+<div class="dem" id="dem"></div>
+<div class="dem" id="ech" hidden></div>
+
+<script>
+// A copy of this whole page as it was loaded, for the « Plein écran » button (taken before anything is drawn)
+const PAGE_SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
+const CONFIG = {
+  // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
+  url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
+  rafraichir: 2,            // minutes entre deux relectures de la feuille (la page reste ouverte pendant les tours)
+  toursComplets: [1, 2],    // tours où un cycle se prend au complet (cycle incomplet seulement si des jours sont bloqués)
+  maxCycles: 2,             // cycles par tour, aux tours complets
+  minJours: 3,              // minimum de jours d'un cycle incomplet
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const utc = d => new Date(d + 'T00:00:00Z');
+const ymd = t => `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(utc(d));
+const jour = d => fmt(d, { weekday: 'short', day: 'numeric', month: 'short' });
+const mod9 = n => ((n % 9) + 9) % 9;
+const mem = {
+  get(k) { try { return localStorage.getItem('vac.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('vac.' + k, v); } catch (e) { /* pas de stockage */ } },
+};
+// S.d = data of the sheet, S.g = group shown (index), S.moi = my initials, S.sel = Set of day indexes I picked,
+// S.unParUn = click single days instead of whole cycles
+const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: false, envoi: false };
+// personal code (4 digits from UK), required to send anything; kept on this device if « retenir » is ticked
+S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeRet = true; S.codeSaisie = '';
+S.msgDem = ['', '']; S.msgEch = ['', ''];           // last result shown under the buttons (kept when the grid reloads)
+
+/* ---------- derived data ---------- */
+const dateDe = k => ymd(new Date(utc(S.d.debut).getTime() + k * 864e5));
+const idxDe = d => Math.round((utc(d) - utc(S.d.debut)) / 864e5);
+const grp = () => S.d.groupes[S.g];
+const moiDe = () => { for (const [gi, g] of S.d.groupes.entries()) { const p = g.gens.find(x => x.i === S.moi); if (p) return { gi, g, p }; } return null; };
+const estVac = v => /^\d+$/.test(String(v || ''));
+// base 5-4 pattern of a person (work = true), from the cycle start date
+function baseTravail(p, k) { if (!p.cy) return null; return mod9(k - idxDe(p.cy)) < 5; }
+// work that day, taking shift exchanges written in the grid into account
+// (as in the sheet: initials on one of their work days = a colleague works for them; on a day off = they work
+//  for that colleague)
+function travaille(g, p, k) {
+  const v = p.j[k], base = baseTravail(p, k);
+  if (v && !estVac(v)) return !base;
+  if (!base && pourQui(g, p, k)) return true;                        // the small mention isn't in their row
+  return base;
+}
+const pourQui = (g, p, k) => g.gens.find(x => x !== p && x.j[k] === p.i && baseTravail(x, k)) || null;
+// state of a day for the group, as coloured in the sheet: 'cr' over the maximum, 'cj' at the maximum
+const etatCol = (g, k) => { const n = g.enVac[k] || 0; return n > g.max ? 'cr' : g.max > 0 && n === g.max ? 'cj' : ''; };
+// the person's 5 work days of the pattern around day k
+function cycleDe(p, k) {
+  if (!baseTravail(p, k)) return [];
+  const debut = k - mod9(k - idxDe(p.cy));
+  return [0, 1, 2, 3, 4].map(x => debut + x).filter(x => x >= 0 && x < S.d.n);
+}
+// whose turn: first one in order who hasn't ticked ✓ for the current round (trainees skipped)
+function aQui(g) { return g.gens.filter(p => !p.form && p.cy).find(p => !p.fini) || null; }
+// state of a day for me: 'mien' (already mine), 'off', 'libre', 'ovlp' (full, my overlap would allow it), 'complet'
+function etatJour(g, p, k) {
+  if (estVac(p.j[k])) return 'mien';
+  if (!travaille(g, p, k)) return 'off';
+  if ((g.places[k] || 0) > 0) return 'libre';
+  const n = g.enVac[k] || 0;
+  if (n === g.max && !g.ovlpPar[k] && p.ov > 0) return 'ovlp';
+  return 'complet';
+}
+
+/* ---------- rendering ---------- */
+function afficher() {
+  if (!S.d) return;
+  const d = S.d;
+  // tabs
+  document.getElementById('onglets').innerHTML = d.groupes.map((g, i) => `<button data-g="${i}" class="${i === S.g ? 'on' : ''}">${esc(g.nom)}</button>`).join('');
+  // me
+  const tous = d.groupes.flatMap(g => g.gens.filter(p => !p.form && p.cy).map(p => p.i));
+  const sel = document.getElementById('moi');
+  sel.innerHTML = '<option value="">—</option>' + tous.slice().sort().map(i => `<option${i === S.moi ? ' selected' : ''}>${esc(i)}</option>`).join('');
+  // months
+  const mois = [];
+  for (let k = 0; k < d.n; k++) if (k === 0 || dateDe(k).slice(8) === '01') mois.push(k);
+  document.getElementById('mois').innerHTML = mois.map(k => `<button data-mois="${k}">${esc(fmt(dateDe(k), { month: 'short' }).replace('.', ''))}</button>`).join('');
+  afficherTour(); afficherGrille(); afficherLegende(); afficherDemande(); afficherEchange();
+  document.getElementById('etat').innerHTML = (CONFIG.url ? '' : '<b class="err">Données d\'exemple</b> · ') +
+    `Feuille lue à ${esc(d.at.slice(11))}<button id="maj" title="Relire la feuille maintenant">↻</button>`;
+}
+
+function afficherTour() {
+  const g = grp(), qui = aQui(g), r = (S.d.regles || {})[String(g.tour)] || [];
+  const actifs = g.gens.filter(p => !p.form && p.cy);
+  const finis = actifs.filter(p => p.fini).map(p => p.i);
+  const apres = qui ? actifs.slice(actifs.indexOf(qui) + 1).filter(p => !p.fini).slice(0, 6).map(p => p.i) : [];
+  const moiTour = qui && qui.i === S.moi;
+  document.getElementById('tour').innerHTML = `<div class="tour${moiTour ? ' moi-tour' : ''}">` +
+    `<b>${esc(g.nom)} — tour ${g.tour}${g.nbTours ? ` sur ${g.nbTours}` : ''}</b>` +
+    (r[0] && !/à fournir/.test(r[0]) ? ` <span class="regle">· ${esc(r[0])}</span>` : '') + '<br>' +
+    (qui ? `${moiTour ? '<b class="qui">C\'est ton tour !</b>' : `C'est au tour de <b class="qui">${esc(qui.i)}</b> <span class="regle">(${esc(qui.o)})</span>`}` +
+      (apres.length ? `<br><span class="suivants">Ensuite : ${apres.map(esc).join(', ')}${finis.length ? ` · ont fini ce tour : ${finis.map(esc).join(', ')}` : ''}</span>` : '')
+      : 'Tout le monde a fini ce tour.') +
+    ((g.attente || []).length ? `<br><span class="suivants">Demandes en file d'attente (inscrites automatiquement à leur tour) : ${g.attente.map(esc).join(', ')}</span>` : '') +
+    `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne (1 de plus que le maximum, 1 par jour)</span></div>`;
+}
+
+function afficherGrille() {
+  const d = S.d, g = grp(), mm = moiDe();
+  const fer = new Map((d.feries || []).map(([x, n]) => [x, n]));
+  const rel = k => (d.relache || []).find(([a, b]) => dateDe(k) >= a && dateDe(k) <= b);
+  const vide = '<th class="g g0"></th><th class="g g1"></th><th class="g g2"></th><th class="g g3"></th><th class="g g4"></th>';
+  let m = '<tr class="m">' + vide;
+  let n = '<tr class="n"><th class="g g0">Ordre</th><th class="g g1">Ini.</th><th class="g g2" title="Jours de vacances pris">Pris</th>' +
+    '<th class="g g3" title="Jours qu\'il reste (crédits − pris)">Solde</th><th class="g g4" title="Overlaps restants">Ovlp.</th>';
+  let w = '<tr class="w">' + vide;
+  const mdeb = k => dateDe(k).slice(8) === '01' ? ' mdeb' : '';
+  for (let k = 0; k < d.n; k++) {
+    const x = dateDe(k), t = utc(x), dow = t.getUTCDay();
+    if (x.slice(8) === '01' || k === 0) {
+      let fin = k; while (fin + 1 < d.n && dateDe(fin + 1).slice(5, 7) === x.slice(5, 7)) fin++;
+      const nom = fmt(x, { month: 'long', year: 'numeric' });
+      m += `<th colspan="${fin - k + 1}" id="m${k}">${esc(nom.charAt(0).toUpperCase() + nom.slice(1))}</th>`;
+    }
+    const f = fer.get(x), r = rel(k), we = dow === 0 || dow === 6, c = etatCol(g, k), nb = g.enVac[k] || 0;
+    const titre = [jour(x), f ? 'Férié payé 1,5x : ' + f : '', r ? 'Relâche : ' + r[2] : '',
+      c === 'cr' ? `${nb} en vacances : overlap utilisé` : c === 'cj' ? `${nb} en vacances : maximum atteint` : ''].filter(Boolean).join(' — ');
+    n += `<th class="j ${c || (f ? 'fer' : we ? 'we' : '')}${mdeb(k)}" title="${esc(titre)}">${t.getUTCDate()}</th>`;
+    w += `<th class="j ${c || (f ? 'fer' : r ? 'rel' : we ? 'we' : '')}${mdeb(k)}" title="${esc(titre)}">${'dlmmjvs'[dow]}</th>`;
+  }
+  const qui = aQui(g);
+  const rangees = g.gens.map(p => {
+    const moi = mm && mm.p === p, tour = qui === p;
+    const cl = ['p', moi ? 'moi' : '', p.fini ? 'fini' : '', tour ? 'tour' : '', p.form || !p.cy ? 'form' : ''].filter(Boolean).join(' ');
+    const solde = parseFloat(String(p.solde).replace(',', '.'));
+    let h = `<tr class="${cl}" data-i="${esc(p.i)}"><td class="g g0">${esc(p.o)}</td><td class="g g1">${esc(p.i)}</td>` +
+      `<td class="g g2">${p.pris || ''}</td><td class="g g3${solde < 0 ? ' neg' : ''}">${esc(p.solde || '')}</td>` +
+      `<td class="g g4${p.form || !p.cy ? '' : p.ov < 0 ? ' ovneg' : p.ov === 0 ? ' ov0' : ''}">${p.form || !p.cy ? '' : p.ov}</td>`;
+    for (let k = 0; k < d.n; k++) {
+      const v = p.j[k], base = baseTravail(p, k), col = etatCol(g, k);
+      let cls, txt = '', titre = '';
+      if (v && !estVac(v)) {
+        if (p.cy && base) { cls = 'ech'; titre = `${v} travaille à la place de ${p.i}`; } else { cls = 'pour'; titre = `${p.i} travaille pour ${v}`; }
+        txt = esc(v);
+      } else if (estVac(v)) {
+        const ov = g.ovlpPar[k] === p.i;
+        cls = p.cy && base === false ? 'vo' : ov ? 'vm' : col === 'cr' ? 'vt' : 'v';
+        txt = esc(v);
+        titre = `${p.i} · tour ${v}${ov ? ' · son overlap' : ''}${cls === 'vo' ? ' · pris sur un congé : à vérifier' : ''}`;
+      } else {
+        const pq = p.cy && base === false ? pourQui(g, p, k) : null;
+        if (pq) { cls = 'pour'; txt = esc(pq.i); titre = `${p.i} travaille pour ${pq.i}`; }
+        else cls = col || (p.cy && base === false ? 'off' : tour ? 'tr' : '');
+      }
+      if (moi && !v && travaille(g, p, k)) {
+        cls += ' cl';
+        if (S.sel.has(k)) { const e = etatJour(g, p, k); cls += ' sel' + (e === 'ovlp' ? ' ovp' : e === 'complet' ? ' ko' : ''); }
+      }
+      h += `<td class="j ${cls}${mdeb(k)}" data-k="${k}"${titre ? ` title="${esc(titre + ' · ' + jour(dateDe(k)))}"` : ''}>${txt}</td>`;
+    }
+    return h + '</tr>';
+  }).join('');
+  const sep = `<tr class="sep"><td class="g g0"></td><td class="g g1"></td><td class="g g2"></td><td class="g g3"></td><td class="g g4"></td><td colspan="${d.n}"></td></tr>`;
+  const ligne = (cls, lab, titre, cell) => `<tr class="tot ${cls}"><td class="g g0"></td><td class="g g1" title="${titre}">${lab}</td><td class="g g2"></td><td class="g g3"></td><td class="g g4"></td>` +
+    Array.from({ length: d.n }, (_, k) => cell(k)).join('') + '</tr>';
+  const bas = ligne('', 'Vac.', 'En vacances', k => `<td class="j ${etatCol(g, k)}${mdeb(k)}">${g.enVac[k] || ''}</td>`) +
+    ligne('places', 'Libres', 'Places restantes', k => `<td class="j${etatCol(g, k) === 'cr' ? ' crb' : ''}${mdeb(k)}">${g.places[k] || 0}</td>`) +
+    ligne('ovl', 'Ovlp.', 'Overlap utilisé par', k => { const v = g.ovlpPar[k] || '';
+      return `<td class="j${v ? ' crb' : ''}${mdeb(k)}"${v ? ` title="${v === 'TROP' ? 'Trop de monde ce jour-là' : 'Overlap utilisé par ' + esc(v)}"` : ''}>${esc(v === 'TROP' ? '!' : v)}</td>`; });
+  const el = document.getElementById('grille'), sx = el.scrollLeft, sy = el.scrollTop;
+  el.innerHTML = `<table><thead>${m}</tr>${n}</tr>${w}</tr></thead><tbody>${rangees}${sep}${bas}</tbody></table>`;
+  el.scrollLeft = sx; el.scrollTop = sy;
+}
+
+function afficherLegende() {
+  const it = (style, t) => `<span><i style="${style}"></i>${t}</span>`;
+  document.getElementById('leg').innerHTML =
+    it('background:#6aa84f', 'vacances (le chiffre = le tour)') + it('background:#fff1cc;box-shadow:inset 0 0 0 1px #f1d98a', 'jour au maximum') +
+    it('background:#df6666', 'overlap utilisé') + it('background:#d9d9d9', 'congé (cycle 5-4)') +
+    it('background:#d9d9d9;box-shadow:inset 0 0 0 1px #bbb', 'initiales : le collègue travaille à sa place') +
+    it('background:#ff9900', 'pris sur un congé (à vérifier)') + it('background:#cfe2f3', 'à son tour') +
+    it('background:repeating-linear-gradient(135deg,#b6d7a8 0 4px,#e2f0d9 4px 8px);box-shadow:inset 0 0 0 1px #38761d', 'ma demande (pas encore dans la feuille)') +
+    it('background:#f4cccc', 'férié') + it('background:#ebddf7', 'relâche') + it('background:#c4ecdc', 'fin de semaine');
+}
+
+// consecutive days → blocks [first, last]
+function blocs(ks) {
+  const out = [];
+  [...ks].sort((a, b) => a - b).forEach(k => { const b = out[out.length - 1]; if (b && k === b[1] + 1) b[1] = k; else out.push([k, k]); });
+  return out;
+}
+// my picks grouped by cycle, with what the page can check
+function analyse() {
+  const mm = moiDe(); if (!mm) return null;
+  const { g, p } = mm, complet = CONFIG.toursComplets.includes(g.tour);
+  const parCycle = new Map();
+  [...S.sel].forEach(k => {
+    const c = cycleDe(p, k), cle = c.length ? c[0] : 'j' + k;
+    if (!parCycle.has(cle)) parCycle.set(cle, { c, ks: [] });
+    parCycle.get(cle).ks.push(k);
+  });
+  const cycles = [...parCycle.values()].sort((a, b) => Math.min(...a.ks) - Math.min(...b.ks)).map(x => {
+    const ks = x.ks.sort((a, b) => a - b), msgs = [];
+    const etats = ks.map(k => etatJour(g, p, k));
+    const nOv = etats.filter(e => e === 'ovlp').length, nKo = etats.filter(e => e === 'complet').length;
+    if (nKo) msgs.push(['x', `${nKo} jour${nKo > 1 ? 's' : ''} déjà complet${nKo > 1 ? 's' : ''}`]);
+    if (nOv) msgs.push(['w', `${nOv} jour${nOv > 1 ? 's' : ''} au maximum : il faudrait ton overlap`]);
+    const libres = x.c.filter(k => !S.sel.has(k) && etatJour(g, p, k) === 'libre');
+    if (complet && libres.length) msgs.push(['w', `cycle incomplet alors que ${libres.length} autre${libres.length > 1 ? 's' : ''} jour${libres.length > 1 ? 's sont libres' : ' est libre'} (${libres.map(k => jour(dateDe(k))).join(', ')})`]);
+    if (complet && ks.length < CONFIG.minJours) msgs.push(['w', `moins de ${CONFIG.minJours} jours`]);
+    if (!msgs.length) msgs.push(['ok', ks.length === 5 ? 'cycle complet' : 'cycle incomplet : les autres jours sont déjà pris']);
+    return { ks, msgs };
+  });
+  const gen = [];
+  if (complet && cycles.length > CONFIG.maxCycles) gen.push(['w', `${cycles.length} cycles : au tour ${g.tour}, c'est ${CONFIG.maxCycles} au maximum`]);
+  if (nOvTot(cycles) > p.ov) gen.push(['x', `il te faudrait ${nOvTot(cycles)} overlaps, il t'en reste ${p.ov}`]);
+  const qui = aQui(g);
+  if (p.fini) gen.push(['x', 'tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour']);
+  else if (qui && qui !== p) gen.push(['w', `ce n'est pas encore ton tour (c'est au tour de ${qui.i}) : ta demande attendra en file et s'inscrira toute seule à ton tour`]);
+  if (cycles.some(c => c.msgs.some(([n]) => n !== 'ok')) || gen.some(([n, t]) => n === 'x' || / cycles :/.test(t)))
+    gen.push(['w', 'une demande qui ne respecte pas les règles n\'est pas inscrite : elle est envoyée à UK, qui décide']);
+  return { g, p, cycles, gen };
+}
+const nOvTot = cycles => cycles.reduce((s, c) => s + c.ks.filter(k => etatJour(S.d.groupes[moiDe().gi], moiDe().p, k) === 'ovlp').length, 0);
+
+function afficherDemande() {
+  const el = document.getElementById('dem');
+  const mm = moiDe();
+  if (!mm) { el.innerHTML = '<h2>Ma demande</h2><div class="aide">Choisis tes initiales en haut (« Moi ») : ta rangée devient cliquable et tu peux préparer ta demande.</div>'; return; }
+  if (mm.gi !== S.g) { el.innerHTML = `<h2>Ma demande</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
+  const a = analyse(), g = mm.g, r = (S.d.regles || {})[String(g.tour)] || [];
+  const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
+  const alt = garde('alt'), note = garde('note');
+  let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
+    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${S.unParUn ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
+    `À ton tour, ta demande est inscrite tout de suite dans la feuille et ton ✓ est coché (UK en reçoit une copie). Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
+    (r[1] ? `<br><b>Règle du tour ${g.tour} :</b> ${esc(r[1])}` : '') + '</div>' +
+    `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>` +
+    boiteCode();
+  if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
+  if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.</div>';
+  h += a.gen.map(([n, t]) => `<div class="avis ${n}">${esc(t)}</div>`).join('');
+  if (!a.cycles.length) h += '<div class="aide" style="margin:8px 0">Aucun jour choisi pour l\'instant.</div>';
+  else {
+    h += '<div class="blocs">' + a.cycles.map((c, i) => {
+      const bs = blocs(c.ks).map(([x, y]) => x === y ? jour(dateDe(x)) : `${jour(dateDe(x))} → ${jour(dateDe(y))}`).join(', ');
+      return `<div class="bloc"><b>${esc(bs)}</b><span class="nb">${c.ks.length} jour${c.ks.length > 1 ? 's' : ''}</span>` +
+        c.msgs.map(([n, t]) => `<span class="m ${n}">${n === 'ok' ? '✓ ' : n === 'x' ? '✗ ' : '⚠ '}${esc(t)}</span>`).join('') +
+        `<button data-enlever="${i}">enlever</button></div>`;
+    }).join('') + '</div>';
+  }
+  h += `<label class="t">Si ma demande ne passe plus quand mon tour arrive, je prendrais plutôt (UK s'en occupe) :` +
+    `<textarea id="alt" placeholder="ex. le cycle suivant, ou rien">${esc(alt)}</textarea></label>` +
+    `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
+    `<div class="actions"><button id="envoyer"${!S.sel.size || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ma demande</button>` +
+    `<button class="sec" id="rien"${S.envoi || !S.code ? ' disabled' : ''}>Je ne prends rien à ce tour-ci</button><span class="msg ${S.msgDem[0]}" id="msg">${S.msgDem[1]}</span></div>`;
+  el.innerHTML = h;
+}
+
+/* ---------- personal code ---------- */
+function boiteCode() {
+  if (S.code) return `<div class="code ok">Code personnel ✓<button class="lien" id="codeOubli" title="Effacer le code de cet appareil">oublier sur cet appareil</button></div>`;
+  return `<div class="code"><label>Ton code personnel (4 chiffres, reçu de UK) :<input id="codeIn" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.codeSaisie)}"></label>` +
+    `<button id="codeOk">Valider</button><label class="ret"><input type="checkbox" id="codeRet"${S.codeRet ? ' checked' : ''}> retenir sur cet appareil</label>` +
+    ` <span class="msg" id="codeMsg"></span><div class="aide" style="font-size:12px">Il faut ton code pour envoyer une demande ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.</div></div>`;
+}
+function validerCode() {
+  const code = (S.codeSaisie || '').trim(), m = t => { const x = document.getElementById('codeMsg'); if (x) { x.className = 'msg x'; x.textContent = t; x.closest('.code').classList.add('ko'); } };
+  if (!/^\d{4}$/.test(code)) return m('4 chiffres.');
+  const ini = S.moi, b = document.getElementById('codeOk'); if (b) { b.disabled = true; b.textContent = 'Vérification…'; }
+  appel({ quoi: 'vac_code', ini, code }, r => {
+    if (S.moi !== ini) return;
+    if (r && r.ok) { S.code = code; S.codeSaisie = ''; if (S.codeRet) mem.set('code.' + ini, code); afficherDemande(); afficherEchange(); return; }
+    afficherDemande(); m((r && r.erreur) || 'Vérification impossible pour le moment. Réessaie dans quelques minutes.');
+  });
+}
+// the server refused the code (changed by UK, or wrong): forget it and ask again
+function codeRefuse(r) {
+  if (!r || !r.code) return false;
+  S.code = ''; mem.set('code.' + S.moi, ''); afficherDemande(); afficherEchange();
+  const x = document.getElementById('codeMsg'); if (x) { x.className = 'msg x'; x.textContent = r.erreur; x.closest('.code').classList.add('ko'); }
+  return true;
+}
+
+/* ---------- shift exchange: « X travaille à la place de Y » on a date, to be written in the grid by UK ---------- */
+// S.ech = lines to send [{ d, qui, pour }], S.echOuvert = form shown, S.echF = what is in the form
+S.ech = []; S.echOuvert = false; S.echF = { d: '', qui: '', pour: '' };
+function verifEchange(g, l) {
+  const k = idxDe(l.d), P = g.gens.find(x => x.i === l.pour), Q = g.gens.find(x => x.i === l.qui), out = [];
+  if (!(k >= 0 && k < S.d.n)) return [['x', 'date hors de l\'année de vacances']];
+  if (estVac(P.j[k])) out.push(['w', `${P.i} est en vacances ce jour-là`]);
+  else if (P.j[k]) out.push(['w', `déjà un échange inscrit pour ${P.i} ce jour-là (${P.j[k]})`]);
+  else if (baseTravail(P, k) === false) out.push(['w', `${P.i} ne travaille pas ce jour-là (cycle 5-4)`]);
+  if (baseTravail(Q, k)) out.push(['w', `${Q.i} travaille déjà ce jour-là`]);
+  if (estVac(Q.j[k])) out.push(['w', `${Q.i} est en vacances ce jour-là`]);
+  return out.length ? out : [['ok', 'ok']];
+}
+function afficherEchange() {
+  const el = document.getElementById('ech'), mm = moiDe();
+  el.hidden = !mm || mm.gi !== S.g;
+  if (el.hidden) return;
+  const g = mm.g, gens = g.gens.filter(p => p.cy && !p.form).map(p => p.i);
+  const F = S.echF;
+  if (!F.pour && !F.qui) F.pour = S.moi;
+  const opt = v => '<option value="">—</option>' + gens.map(i => `<option${i === v ? ' selected' : ''}>${esc(i)}</option>`).join('');
+  let h = `<h2>Échange de quart${S.echOuvert ? '' : ' <button class="ouvrir" id="echOuvrir">+ Ajouter un échange</button>'}</h2>` +
+    '<div class="aide">Pour inscrire dans la grille un échange de quart : qui travaille à la place de qui, et quel jour. Il est inscrit tout de suite s\'il est possible (sinon UK décide) ; UK en reçoit une copie.</div>';
+  if (S.echOuvert) {
+    h += `<div class="echf">Le <input type="date" id="echD" value="${esc(F.d)}" min="${S.d.debut}" max="${dateDe(S.d.n - 1)}">` +
+      `<select id="echQui" aria-label="Qui travaille">${opt(F.qui)}</select> travaille à la place de ` +
+      `<select id="echPour" aria-label="À la place de">${opt(F.pour)}</select><button id="echAjout">Ajouter</button></div>`;
+    h += '<div class="blocs">' + S.ech.map((l, i) => `<div class="bloc"><b>${esc(jour(l.d))}</b><span>${esc(l.qui)} travaille à la place de ${esc(l.pour)}</span>` +
+      verifEchange(g, l).map(([n, t]) => n === 'ok' ? '<span class="m ok">✓</span>' : `<span class="m ${n}">${n === 'x' ? '✗' : '⚠'} ${esc(t)}</span>`).join('') +
+      `<button data-echenl="${i}">enlever</button></div>`).join('') + '</div>';
+    h += `<label class="t">Note pour UK (facultatif)<textarea id="echNote">${esc(F.note || '')}</textarea></label>` +
+      (S.code ? '' : '<div class="aide" style="margin-top:8px">Entre d\'abord ton code personnel dans « Ma demande ».</div>') +
+      `<div class="actions"><button id="echEnvoyer"${!S.ech.length || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ${S.ech.length > 1 ? 'les échanges' : 'l\'échange'}</button>` +
+      `<button class="sec" id="echFermer">Annuler</button><span class="msg ${S.msgEch[0]}" id="echMsg">${S.msgEch[1]}</span></div>`;
+  }
+  el.innerHTML = h;
+}
+function ajouterEchange() {
+  const F = S.echF, msg = t => { document.getElementById('echMsg').className = 'msg x'; document.getElementById('echMsg').textContent = t; };
+  if (!F.d) return msg('Choisis la date.');
+  if (!F.qui || !F.pour) return msg('Choisis les deux personnes.');
+  if (F.qui === F.pour) return msg('Il faut deux personnes différentes.');
+  if (F.qui !== S.moi && F.pour !== S.moi) return msg('Tu dois être une des deux personnes de l\'échange.');
+  if (S.ech.length >= 10) return msg('10 échanges au plus par envoi.');
+  if (!S.ech.some(l => l.d === F.d && l.qui === F.qui && l.pour === F.pour)) S.ech.push({ d: F.d, qui: F.qui, pour: F.pour });
+  S.ech.sort((a, b) => (a.d < b.d ? -1 : 1));
+  F.d = ''; afficherEchange();
+}
+function envoyerEchange() {
+  const mm = moiDe(); if (!mm || !S.ech.length) return;
+  const avert = S.ech.map(l => [l, verifEchange(mm.g, l).filter(([n]) => n !== 'ok')]).filter(x => x[1].length)
+    .map(([l, m]) => `${l.d} ${l.qui}>${l.pour} : ${m.map(x => x[1]).join(', ')}`).join(' ; ');
+  S.envoi = true; afficherEchange();
+  const msg = (cls, t) => { S.msgEch = [cls, esc(t)]; const m = document.getElementById('echMsg'); if (m) { m.className = 'msg ' + cls; m.textContent = t; } };
+  msg('', 'Envoi…');
+  appel({ quoi: 'vac_echange', ini: S.moi, code: S.code, ech: S.ech.map(l => `${l.d}:${l.qui}>${l.pour}`).join(','), note: S.echF.note || '', avert }, r => {
+    S.envoi = false;
+    if (r && r.ok) { const n = S.ech.length; S.ech = []; S.echF = { d: '', qui: '', pour: S.moi }; afficherEchange();
+      if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${(r.raisons || []).join(' ; ')}`);
+      else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.`); charger(true); } }
+    else if (codeRefuse(r)) { afficherEchange(); msg('x', r.erreur); }
+    else { afficherEchange(); msg('x', (r && r.erreur) || 'Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.'); }
+  });
+}
+// Call to the web app. 1st try: a plain request WITHOUT the browser's Google sign-in (like the grid and the
+// schedule page): JSONP sends the Google cookies, and with several Google accounts signed in, Google answers
+// with a sign-in page instead, so the call fails. JSONP is only a fallback, and only for calls that change
+// nothing (a request or an exchange is never sent twice).
+function appel(params, fini) {
+  const f0 = fini;
+  fini = r => f0(r && !r.ok && !r.erreur ? { erreur: 'Le serveur du site n\'a pas encore la nouvelle version (UK doit la déployer). Réessaie plus tard.' } : r);
+  if (!CONFIG.url) {                     // sample data: the code is 1234
+    const bon = !('code' in params) || params.code === '1234';
+    let rep = { ok: 1 };
+    if (bon && params.quoi === 'vac_demande') {        // like the server: written at your turn, otherwise queued
+      const mm = moiDe(), qui = mm && aQui(mm.g), actifs = mm ? mm.g.gens.filter(p => !p.form && p.cy && !p.fini) : [];
+      rep = qui === (mm && mm.p) ? { ok: 1, statut: 'inscrite' } : { ok: 1, statut: 'attente', avant: Math.max(0, actifs.indexOf(mm.p)), raisons: [] };
+    } else if (bon && params.quoi === 'vac_echange') rep = { ok: 1, statut: 'inscrit' };
+    setTimeout(() => fini(bon ? rep : { erreur: `Code incorrect pour ${params.ini}. (Données d'exemple : 1234)`, code: 1 }), 300); return;
+  }
+  const q = Object.entries(Object.assign({ type: 'equipe' }, params)).map(([k, x]) => k + '=' + encodeURIComponent(x)).join('&');
+  const u = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + q;
+  const sansEffet = params.quoi === 'vac_code';
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+  fetch(u + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store', signal: ctl.signal })
+    .then(r => r.json())
+    .then(r => { clearTimeout(t); fini(r); })
+    .catch(() => { clearTimeout(t); if (sansEffet) jsonp(u, fini); else fini(null); });
+}
+function jsonp(u, fini) {
+  const cb = '__vac' + Date.now(), s = document.createElement('script');
+  const minuterie = setTimeout(() => { delete window[cb]; s.remove(); fini(null); }, 30000);
+  window[cb] = r => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(r); };
+  s.onerror = () => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(null); };
+  s.src = u + '&callback=' + cb;
+  document.head.appendChild(s);
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  const g = t.closest('[data-g]');
+  if (g) { S.g = +g.dataset.g; S.sel.clear(); afficher(); return; }
+  const mo = t.closest('[data-mois]');
+  if (mo) { const c = document.getElementById('m' + mo.dataset.mois), el = document.getElementById('grille');
+    // measured on screen: the sticky columns' offsetLeft moves with the scroll, so it can't be used
+    const r0 = el.getBoundingClientRect().left, fixe = [...el.querySelectorAll('thead tr.n .g')].filter(x => x.offsetWidth);
+    const gauche = fixe.length ? Math.max(...fixe.map(x => x.getBoundingClientRect().right)) - r0 : 0;
+    if (c) el.scrollTo({ left: el.scrollLeft + c.getBoundingClientRect().left - r0 - gauche, behavior: 'smooth' }); return; }
+  if (t.id === 'maj') { charger(true); return; }
+  const td = t.closest('tr.moi td.j.cl');
+  if (td) {
+    const mm = moiDe(), k = +td.dataset.k;
+    const ks = S.unParUn ? [k] : cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
+    const tous = ks.every(x => S.sel.has(x));
+    ks.forEach(x => (tous ? S.sel.delete(x) : S.sel.add(x)));
+    S.msgDem = ['', ''];
+    afficherGrille(); afficherDemande(); return;
+  }
+  const enl = t.closest('[data-enlever]');
+  if (enl) { const a = analyse(); (a.cycles[+enl.dataset.enlever] || { ks: [] }).ks.forEach(k => S.sel.delete(k)); afficherGrille(); afficherDemande(); return; }
+  if (t.id === 'envoyer') envoyer(false);
+  if (t.id === 'rien') envoyer(true);
+  if (t.id === 'codeOk') validerCode();
+  if (t.id === 'codeOubli') { mem.set('code.' + S.moi, ''); S.code = ''; afficherDemande(); afficherEchange(); }
+  if (t.id === 'echOuvrir') { S.echOuvert = true; afficherEchange(); }
+  if (t.id === 'echFermer') { S.echOuvert = false; S.ech = []; afficherEchange(); }
+  if (t.id === 'echAjout') ajouterEchange();
+  if (t.id === 'echEnvoyer') envoyerEchange();
+  const ee = t.closest('[data-echenl]');
+  if (ee) { S.ech.splice(+ee.dataset.echenl, 1); afficherEchange(); }
+});
+document.addEventListener('input', e => {
+  const k = { echD: 'd', echQui: 'qui', echPour: 'pour', echNote: 'note' }[e.target.id];
+  if (k) S.echF[k] = e.target.value;
+  if (e.target.id === 'codeIn') S.codeSaisie = e.target.value.replace(/\D/g, '').slice(0, 4);
+});
+document.addEventListener('keydown', e => { if (e.target.id === 'codeIn' && e.key === 'Enter') validerCode(); });
+document.addEventListener('change', e => {
+  if (e.target.id === 'moi') {
+    S.moi = e.target.value; mem.set('moi', S.moi); S.sel.clear(); S.ech = []; S.echF = { d: '', qui: '', pour: S.moi };
+    S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
+    const mm = moiDe(); if (mm) S.g = mm.gi;
+    afficher();
+  } else if (e.target.id === 'unParUn') { S.unParUn = e.target.checked; afficherDemande(); }
+  else if (e.target.id === 'codeRet') S.codeRet = e.target.checked;
+});
+
+function envoyer(rien) {
+  const a = analyse(); if (!a) return;
+  const msg = (cls, t) => { S.msgDem = [cls, t]; const m = document.getElementById('msg'); if (m) { m.className = 'msg ' + cls; m.innerHTML = t; } };
+  const avert = [...a.gen.map(x => x[1]), ...a.cycles.flatMap(c => c.msgs.filter(([n]) => n !== 'ok')
+    .map(([, t]) => `${blocs(c.ks).map(([x, y]) => dateDe(x) + (x === y ? '' : '→' + dateDe(y))).join(', ')} : ${t}`))].join(' ; ');
+  const c = { ini: S.moi, code: S.code, tour: String(a.g.tour), jours: rien ? '' : [...S.sel].sort((x, y) => x - y).map(dateDe).join(','), rien: rien ? '1' : '',
+    alt: document.getElementById('alt').value, note: document.getElementById('note').value, avert };
+  S.envoi = true; afficherDemande(); document.getElementById('alt').value = c.alt; document.getElementById('note').value = c.note;
+  msg('', 'Envoi…');
+  const fini = r => {
+    S.envoi = false;
+    if (r && r.ok) {
+      ['alt', 'note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
+      S.sel.clear(); afficherGrille(); afficherDemande();
+      if (r.statut === 'inscrite') msg('ok', rien ? 'C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.' : 'Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.');
+      else if (r.statut === 'attente') msg('ok', `En file d'attente ✓ — ${r.avant ? `${r.avant} personne${r.avant > 1 ? 's' : ''} avant toi. ` : ''}Ta demande s'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.` +
+        (r.raisons && r.raisons.length ? ` <b>Attention : en ce moment, elle ne passerait pas</b> (${esc(r.raisons.join(' ; '))}).` : ''));
+      else if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${esc((r.raisons || []).join(' ; '))}. C'est toujours ton tour.`);
+      else msg('ok', 'Envoyé ✓');
+      charger(true);
+    } else if (codeRefuse(r)) { msg('x', esc(r.erreur)); }
+    else { afficherDemande(); msg('x', esc((r && r.erreur) || 'Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.')); }
+  };
+  appel(Object.assign({ quoi: 'vac_demande' }, c), fini);
+}
+
+/* ---------- loading ---------- */
+function garder(d) {
+  if (!d || !Array.isArray(d.groupes) || !d.debut) return false;
+  const premier = !S.d;
+  S.d = d;
+  if (premier) { const mm = moiDe(); if (mm) S.g = mm.gi; }
+  // a picked day that is now in the sheet (mine) leaves my request
+  const mm = moiDe(); if (mm) [...S.sel].forEach(k => { if (estVac(mm.p.j[k])) S.sel.delete(k); });
+  afficher(); return true;
+}
+function charger(frais) {
+  if (!CONFIG.url) { garder(demo()); return; }
+  if (!S.d && !frais) { try { garder(JSON.parse(mem.get('data') || 'null')); } catch (e) { /* cache illisible */ } }
+  const u = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + 'type=equipe&quoi=vacances' + (frais ? '&frais=1' : '');
+  const ko = () => { if (!S.d) document.getElementById('etat').innerHTML = '<span class="err">Feuille des vacances indisponible pour le moment.</span>'; };
+  fetch(u + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store' }).then(r => r.json())
+    .then(d => { if (!garder(d)) throw 0; try { mem.set('data', JSON.stringify(d)); } catch (e) { /* trop gros */ } })
+    .catch(() => {
+      const cb = '__vacl' + Date.now(), s = document.createElement('script');
+      window[cb] = d => { delete window[cb]; s.remove(); if (garder(d)) { try { mem.set('data', JSON.stringify(d)); } catch (e) { /* */ } } else ko(); };
+      s.onerror = () => { s.remove(); ko(); };
+      s.src = u + '&callback=' + cb; document.head.appendChild(s);
+    });
+}
+// sample data (no link): 2 groups, cycles 5-4, a few picks, one overlap, one shift exchange
+function demo() {
+  const debut = '2027-04-01', n = 366;
+  const C = [['C01','SF','2027-04-01'],['C02','BT','2027-03-24'],['C03','GE','2027-03-29'],['C04','YH','2027-04-01'],['C05','ZZ','2027-03-30'],
+    ['C06','DW','2027-03-28'],['C07','JX','2027-03-29'],['C08','LH','2027-03-25'],['C09','ZA','2027-04-01'],['C10','YM','2027-03-27'],
+    ['C11','KC','2027-03-27'],['C12','XV','2027-03-28'],['C13','OJ','2027-03-30'],['C14','UK','2027-03-26'],['C15','WY','2027-03-26'],
+    ['C16','NV','2027-03-27'],['C17','ZU','2027-03-31'],['C18','IF','2027-03-31'],['C19','AU','2027-03-26'],['C20','FA','2027-03-25'],
+    ['C21','CV','2027-03-28'],['C22','GB','2027-03-31'],['C23','HK',''],['C24','QL','']];
+  const SU = [['S01','HY','2027-03-24'],['S02','DB','2027-03-26'],['S03','DE','2027-03-27'],['S04','IQ','2027-04-01'],['S05','DK','2027-03-30'],
+    ['S06','GA','2027-03-29'],['S07','CZ','2027-03-31']];
+  const ix = d => Math.round((utc(d) - utc(debut)) / 864e5);
+  const mk = (l, ov) => l.map(([o, i, cy]) => ({ o, i, dispo: '', t: [0, 0, 0, 0, 0, 0], pris: 0, solde: '', ov, fini: false, cy, form: !cy, j: {} }));
+  const groupes = [{ cle: 'C', nom: 'Contrôleurs', tour: 2, nbTours: 5, max: 3, ovlp: 1, gens: mk(C, 1) },
+    { cle: 'S', nom: 'Surveillants', tour: 1, nbTours: 6, max: 1, ovlp: 3, gens: mk(SU, 3) }];
+  const prendre = (g, i, autour, tour) => {
+    const p = groupes[g].gens.find(x => x.i === i); let k = ix(autour);
+    while (mod9(k - ix(p.cy)) >= 5) k++;
+    k -= mod9(k - ix(p.cy));
+    for (let x = 0; x < 5; x++) { p.j[k + x] = String(tour); p.t[tour - 1]++; p.pris++; }
+  };
+  prendre(0, 'SF', '2027-07-01', 1); prendre(0, 'BT', '2027-07-01', 1); prendre(0, 'GE', '2027-07-01', 1); prendre(0, 'ZZ', '2027-08-15', 1);
+  prendre(0, 'DW', '2027-12-22', 1); prendre(0, 'SF', '2027-08-20', 1); prendre(0, 'YH', '2027-07-01', 2);
+  prendre(1, 'HY', '2027-07-10', 1); prendre(1, 'DB', '2027-12-24', 1);
+  ['SF', 'BT', 'GE'].forEach(i => { groupes[0].gens.find(x => x.i === i).fini = true; });
+  groupes[0].gens.find(x => x.i === 'YH').ov = 0;
+  const uk = groupes[0].gens.find(x => x.i === 'UK'); let k = ix('2027-07-01'); while (mod9(k - ix(uk.cy)) >= 5) k++;
+  const col = groupes[0].gens.find(x => x.cy && mod9(k - ix(x.cy)) >= 5); uk.j[k] = col.i; col.j[k] = 'UK';
+  for (const g of groupes) {
+    g.enVac = []; g.places = []; g.ovlpPar = [];
+    for (let k = 0; k < n; k++) {
+      const v = g.gens.filter(p => /^\d+$/.test(p.j[k] || ''));
+      g.enVac[k] = v.length; g.places[k] = Math.max(0, g.max - v.length);
+      g.ovlpPar[k] = v.length <= g.max ? '' : v.length > g.max + 1 ? 'TROP' : v.reduce((a, p) => (+p.j[k] >= +a.j[k] ? p : a)).i;
+    }
+  }
+  return { at: '2026-11-20 21:00', debut, n, groupes,
+    regles: { 1: ["Jusqu'à 2 cycles complets  •  Minimum 3 jours si bloqué", "Chaque personne peut prendre 0, 1 ou 2 cycles complets ; un cycle incomplet d'au moins 3 jours seulement si les autres jours sont déjà bloqués par d'autres."],
+      2: ["Jusqu'à 2 cycles complets  •  Minimum 3 jours si bloqué", "Mêmes règles qu'au tour 1."] },
+    feries: [['2027-05-24', 'Fête de la Reine'], ['2027-06-24', 'Fête de la St-Jean'], ['2027-07-01', 'Fête du Canada'], ['2027-09-06', 'Fête du Travail'],
+      ['2027-09-30', 'Journée nationale de la vérité et de la réconciliation'], ['2027-10-11', 'Action de grâce'], ['2027-11-11', 'Jour du Souvenir'],
+      ['2027-12-25', 'Noël'], ['2027-12-26', 'Boxing Day'], ['2028-01-01', 'Jour de l\'An']],
+    relache: [['2028-02-26', '2028-03-03', 'CSS des Affluents (probable, à confirmer)'], ['2028-03-04', '2028-03-12', 'La plupart des CSS (à confirmer)']] };
+}
+// « Plein écran »: opens a new tab and writes this same page into it (as on the schedule page: no web
+// address involved). Shown only inside the Wix frame.
+(() => {
+  const b = document.getElementById('bPlein');
+  let dansCadre = true;
+  try { dansCadre = window.top !== window; } catch (e) { dansCadre = true; }
+  if (!dansCadre) { document.body.classList.add('seul'); return; }
+  b.hidden = false;
+  b.onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { b.textContent = 'Fenêtre bloquée par le navigateur'; return; }
+    try { w.document.open(); w.document.write(PAGE_SOURCE); w.document.close(); }
+    catch (e) { w.location.href = URL.createObjectURL(new Blob([PAGE_SOURCE], { type: 'text/html' })); }
+  };
+})();
+charger();
+if (CONFIG.url) setInterval(() => { if (!document.hidden && !S.envoi) charger(); }, CONFIG.rafraichir * 60000);   // the script caches 2 min
+</script>
+</body>
+</html>

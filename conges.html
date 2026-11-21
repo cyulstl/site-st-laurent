@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Congés — St-Laurent</title>
+<!--
+  CONGÉS — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé), sur sa propre page.
+  - Liste et ligne du temps des congés en cours et à venir (onglet « Congés » du fichier Horaire).
+  - Formulaire pour soumettre un congé : la ligne est ajoutée à l'onglet (« Confirmé » décoché) et un courriel part.
+    Il s'affiche ici « à confirmer » et ne compte dans l'horaire qu'une fois « Confirmé » coché. (Avec confirmerAuto
+    dans le script, il est confirmé d'office et compte tout de suite.)
+  Lit …/exec?type=equipe&quoi=conges et envoie …/exec?type=equipe&quoi=conge_ajout (application Web de l'Admin. Worksheet).
+-->
+<style>
+  :root { --fg: #3c4043; --muted: #70757a; --line: #dadce0; --soft: #f1f3f4; --bg: #fff; --accent: #1a73e8;
+          --ok: #188038; --wait: #b06000; --x: #c5221f; --bar: #5fb8d6; --barw: #f6c26b;
+          font-family: Roboto, "Segoe UI", Arial, sans-serif; font-size: 14px; color: var(--fg); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
+  .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .ajout-lien { font-size: 13px; color: var(--accent); text-decoration: none; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0; }
+  section { padding: 14px 16px 22px; min-width: 0; }
+  section + section { border-left: 1px solid var(--line); }
+  h2 { font-size: 16px; font-weight: 500; color: #202124; margin: 0 0 4px; }
+  .sous { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
+  .vide { color: var(--muted); padding: 14px 0; }
+  .err { color: var(--x); }
+
+  /* list */
+  .cg { display: grid; grid-template-columns: 52px 1fr auto; gap: 2px 12px; align-items: baseline; padding: 8px 4px;
+        border-bottom: 1px solid #f0f1f2; }
+  .cg .ini { font-weight: 600; color: #202124; font-size: 15px; }
+  .cg .type { font-weight: 500; }
+  .cg .dates { grid-column: 2; color: var(--muted); font-size: 13px; }
+  .cg .note { grid-column: 2 / 4; color: var(--muted); font-size: 12px; font-style: italic; }
+  .cg .duree { grid-row: 1; grid-column: 3; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .badge { font-size: 10.5px; border-radius: 8px; padding: 1px 7px; margin-left: 6px; white-space: nowrap; vertical-align: 1px; }
+  .badge.att { color: var(--wait); border: 1px solid #f3d19e; background: #fef7e0; }
+  .badge.cours { color: var(--ok); border: 1px solid #b7dfc3; background: #e6f4ea; }
+  .cg.moi { background: #e8f0fe; border-radius: 6px; }
+
+  /* timeline */
+  .ldt { position: relative; margin: 6px 0 4px; }
+  .ldt .mois { position: relative; height: 18px; margin-left: 52px; border-bottom: 1px solid var(--line); }
+  .ldt .mois span { position: absolute; top: 0; font-size: 10.5px; color: var(--muted); transform: translateX(2px); white-space: nowrap; }
+  .ldt .rang { position: relative; height: 22px; display: flex; align-items: center; }
+  .ldt .rang b { width: 52px; flex: none; font-size: 12px; color: #202124; }
+  .ldt .piste { position: relative; flex: 1; height: 100%; }
+  .ldt .barre { position: absolute; top: 5px; height: 12px; border-radius: 6px; background: var(--bar); min-width: 4px; }
+  .ldt .barre.att { background: repeating-linear-gradient(135deg, var(--barw) 0 5px, #fbe3b5 5px 10px); }
+  .ldt .barre.ouvert { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .ldt .grille { position: absolute; top: 18px; bottom: 0; left: 52px; right: 0; pointer-events: none; }
+  .ldt .grille i { position: absolute; top: 0; bottom: 0; border-left: 1px solid #f1f3f4; }
+  .ldt .grille i.an { border-left-color: #dadce0; }
+  .ldt .grille .auj { border-left: 2px solid #ea4335; }
+  .legende { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+  .legende i { display: inline-block; width: 18px; height: 9px; border-radius: 5px; margin-right: 5px; vertical-align: -1px; background: var(--bar); }
+  .legende i.att { background: repeating-linear-gradient(135deg, var(--barw) 0 5px, #fbe3b5 5px 10px); }
+  .legende i.auj { width: 2px; border-radius: 0; background: #ea4335; height: 12px; }
+
+  /* form */
+  form { display: grid; gap: 10px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  select, input, textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-size: 14px; }
+  select:focus, input:focus, textarea:focus { outline: 2px solid #d2e3fc; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 54px; }
+  .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .aide { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .envoyer { border: 0; border-radius: 20px; background: var(--accent); color: #fff; font-weight: 500; padding: 10px 18px; cursor: pointer; }
+  .envoyer:disabled { opacity: .55; cursor: default; }
+  .msg { font-size: 13px; line-height: 1.45; border-radius: 8px; padding: 8px 10px; }
+  .msg.ok { background: #e6f4ea; color: var(--ok); } .msg.x { background: #fce8e6; color: var(--x); } .msg.w { background: #fef7e0; color: var(--wait); }
+
+  @media (max-width: 760px) {
+    main { display: block; }
+    section + section { border-left: 0; border-top: 1px solid var(--line); }
+    .etat { margin-left: 0; width: 100%; }
+  }
+  select, input, textarea { min-width: 0; width: 100%; box-sizing: border-box; }
+  .deux > label { min-width: 0; }
+  /* phones (the Wix mobile box is about 280-320 px wide): dates one above the other, length under the dates */
+  @media (max-width: 420px) {
+    .deux { grid-template-columns: 1fr; }
+    .cg { grid-template-columns: 40px 1fr; gap: 2px 10px; }
+    .cg .duree { grid-row: auto; grid-column: 2; order: 2; }
+    .cg .dates { order: 1; }
+    .cg .note { grid-column: 2; order: 3; }
+    .cg .duree.sansfin { display: none; }       /* the dates already say « sans date de fin » */
+    header, section { padding-left: 12px; padding-right: 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Congés</h1>
+  <a class="ajout-lien" href="#ajout">＋ Soumettre un congé</a>
+  <span class="etat" id="etat">Chargement…</span>
+</header>
+<main>
+  <section id="liste"><div class="vide">Chargement…</div></section>
+  <section id="ajout">
+    <h2>Soumettre un congé</h2>
+    <div class="sous" id="sousForm">Congé autofinancé, parental, formation, départ… Il s'affiche tout de suite ici et compte dans l'horaire.</div>
+    <form id="f" autocomplete="off">
+      <label>Initiales <select id="ini" required><option value="">— choisir —</option></select></label>
+      <label>Type de congé <select id="type" required><option value="">— choisir —</option></select></label>
+      <div class="deux">
+        <label>Premier jour <input type="date" id="debut" required></label>
+        <label>Dernier jour <input type="date" id="fin"></label>
+      </div>
+      <div class="aide">Laisse « Dernier jour » vide s'il n'y a pas de date de retour (retraite, fin de contrat…).</div>
+      <label>Note (facultatif) <textarea id="note" maxlength="140" placeholder="Ex. : retour progressif, dates à confirmer…"></textarea></label>
+      <button class="envoyer" id="envoyer" type="submit">Envoyer</button>
+      <div class="msg" id="msg" hidden></div>
+    </form>
+  </section>
+</main>
+<script>
+const CONFIG = {
+  // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
+  url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
+  moisLigne: 24,            // ligne du temps : nombre de mois montrés (à partir du mois en cours)
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const ymd = t => `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
+const utc = d => new Date(d + 'T00:00:00Z');
+const AUJ = (() => { const n = new Date(); return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`; })();
+const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(utc(d));
+const jma = d => fmt(d, { day: 'numeric', month: 'short', year: 'numeric' });
+const mem = {
+  get(k) { try { return localStorage.getItem('conges.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('conges.' + k, v); } catch (e) { /* pas de stockage */ } },
+};
+const S = { d: null, moi: mem.get('moi') || '' };
+
+function duree(a, b) {
+  if (!b) return 'sans date de fin';
+  const j = Math.round((utc(b) - utc(a)) / 864e5) + 1;
+  if (j < 45) return j + (j > 1 ? ' jours' : ' jour');
+  const m = Math.round(j / 30.44);
+  return m >= 12 && m % 12 === 0 ? (m / 12) + (m > 12 ? ' ans' : ' an') : m + ' mois';
+}
+
+function afficher() {
+  const D = S.d; if (!D) return;
+  document.getElementById('etat').innerHTML = (CONFIG.url ? '' : '<b class="err">Données d\'exemple</b> · ') + `Mis à jour ${esc(D.at)}`;
+  document.getElementById('sousForm').textContent = 'Congé autofinancé, parental, formation, départ… ' + (D.auto
+    ? 'Il s\'affiche tout de suite ici et compte dans l\'horaire.' : 'Il s\'affiche tout de suite ici (« à confirmer ») et compte dans l\'horaire une fois confirmé.');
+  // form lists
+  const iniSel = document.getElementById('ini'), tySel = document.getElementById('type');
+  if (iniSel.options.length <= 1) {
+    iniSel.innerHTML = '<option value="">— choisir —</option>' + D.gens.map(w => `<option${w === S.moi ? ' selected' : ''}>${esc(w)}</option>`).join('');
+    tySel.innerHTML = '<option value="">— choisir —</option>' + D.types.map(t => `<option>${esc(t)}</option>`).join('');
+  }
+  const L = D.conges.map(([i, type, debut, fin, note, ok]) => ({ i, type, debut, fin, note, ok }));
+  const enCours = c => (!c.debut || c.debut <= AUJ) && (!c.fin || c.fin >= AUJ);
+  const cours = L.filter(enCours), venir = L.filter(c => !enCours(c));
+  const ligne = c => `<div class="cg${c.i === S.moi ? ' moi' : ''}"><span class="ini">${esc(c.i)}</span>` +
+    `<span><span class="type">${esc(c.type || 'Congé')}</span>${c.ok ? '' : '<span class="badge att" title="Pas encore confirmé : ne compte pas encore dans l\'horaire">à confirmer</span>'}` +
+    `${enCours(c) ? '<span class="badge cours">en cours</span>' : ''}</span>` +
+    `<span class="duree${c.fin ? '' : ' sansfin'}">${duree(c.debut || AUJ, c.fin)}</span>` +
+    `<span class="dates">${c.debut ? jma(c.debut) : 'déjà en congé'} → ${c.fin ? jma(c.fin) : 'sans date de fin'}</span>` +
+    `${c.note ? `<span class="note">${esc(c.note)}</span>` : ''}</div>`;
+  let h = '<h2>Congés en cours et à venir</h2><div class="sous">Congés longs ou planifiés d\'avance (autofinancé, parental, formation, départ…). ' +
+    'Pour les vacances et le comp, rien ne change.</div>';
+  h += ligneDuTemps(L);
+  h += '<h3>En cours</h3>' + (cours.length ? cours.map(ligne).join('') : '<div class="vide">Personne en ce moment.</div>');
+  h += '<h3>À venir</h3>' + (venir.length ? venir.map(ligne).join('') : '<div class="vide">Aucun congé à venir.</div>');
+  document.getElementById('liste').innerHTML = h;
+}
+
+// one bar per leave over the next months; striped = not approved yet; red line = today
+function ligneDuTemps(L) {
+  const n = new Date(), t0 = `${n.getFullYear()}-${pad(n.getMonth() + 1)}-01`;
+  let mois = CONFIG.moisLigne;
+  const fins = L.map(c => c.fin || c.debut).filter(Boolean).sort();
+  const dern = fins[fins.length - 1];
+  if (dern) { const [y, m] = dern.split('-').map(Number), k = (y - n.getFullYear()) * 12 + (m - 1 - n.getMonth()) + 2; mois = Math.min(48, Math.max(mois, k)); }
+  const t1d = new Date(Date.UTC(n.getFullYear(), n.getMonth() + mois, 1)), t1 = ymd(t1d);
+  const T0 = utc(t0).getTime(), T1 = t1d.getTime(), pos = d => Math.max(0, Math.min(100, (utc(d).getTime() - T0) / (T1 - T0) * 100));
+  const vis = L.filter(c => (!c.fin || c.fin >= t0) && (!c.debut || c.debut < t1));
+  if (!vis.length) return '';
+  let tete = '', grille = '';
+  const etroit = innerWidth < 760, premJanv = (12 - n.getMonth()) % 12;     // months until the next January
+  for (let k = 0; k < mois; k++) {
+    const dt = new Date(Date.UTC(n.getFullYear(), n.getMonth() + k, 1)), d = ymd(dt), x = pos(d), an = dt.getUTCMonth() === 0;
+    if (etroit) {                                      // phone: years only (and the first month if January is far)
+      if (an) tete += `<span style="left:${x}%">${dt.getUTCFullYear()}</span>`;
+      else if (k === 0 && premJanv >= 4) tete += `<span style="left:${x}%">${fmt(d, { month: 'short' })}</span>`;
+    } else if (k % (mois > 30 ? 3 : 2) === 0 || an) {
+      tete += `<span style="left:${x}%">${an || k === 0 ? fmt(d, { month: 'short', year: 'numeric' }) : fmt(d, { month: 'short' })}</span>`;
+    }
+    grille += `<i class="${an ? 'an' : ''}" style="left:${x}%"></i>`;
+  }
+  grille += `<i class="auj" style="left:${pos(AUJ)}%"></i>`;
+  const rangs = vis.map(c => {
+    const a = pos(c.debut || t0), b = c.fin ? pos(ymd(new Date(utc(c.fin).getTime() + 864e5))) : 100;
+    return `<div class="rang"><b>${esc(c.i)}</b><div class="piste"><div class="barre${c.ok ? '' : ' att'}${c.fin ? '' : ' ouvert'}" ` +
+      `style="left:${a}%;width:${Math.max(0.6, b - a)}%" title="${esc(c.i)} · ${esc(c.type || 'Congé')} · ${c.debut ? jma(c.debut) : '…'} → ${c.fin ? jma(c.fin) : '…'}${c.ok ? '' : ' (à confirmer)'}"></div></div></div>`;
+  }).join('');
+  return `<div class="ldt"><div class="mois">${tete}</div><div class="grille">${grille}</div>${rangs}</div>` +
+    '<div class="legende"><span><i></i>confirmé</span><span><i class="att"></i>à confirmer</span><span><i class="auj"></i>aujourd\'hui</span></div>';
+}
+
+/* ---------- form ---------- */
+const msg = (cls, t) => { const m = document.getElementById('msg'); m.className = 'msg ' + cls; m.innerHTML = t; m.hidden = !t; };
+document.getElementById('ini').onchange = e => { S.moi = e.target.value; mem.set('moi', S.moi); afficher(); };
+document.getElementById('debut').onchange = e => { const f = document.getElementById('fin'); f.min = e.target.value; };
+document.getElementById('f').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = id => document.getElementById(id).value.trim();
+  const c = { ini: v('ini'), ctype: v('type'), debut: v('debut'), fin: v('fin'), note: v('note') };
+  if (!c.ini || !c.ctype || !c.debut) { msg('x', 'Choisis tes initiales, le type et le premier jour.'); return; }
+  if (c.fin && c.fin < c.debut) { msg('x', 'Le dernier jour est avant le premier.'); return; }
+  if ((c.fin || c.debut) < AUJ) { msg('x', 'Ce congé est déjà terminé.'); return; }
+  const chev = (S.d ? S.d.conges : []).find(([i, , a, b]) => i === c.ini && (!a || !c.fin || a <= c.fin) && (!b || b >= c.debut));
+  if (chev && !document.getElementById('envoyer').dataset.force) {
+    msg('w', `Tu as déjà un congé qui chevauche ces dates (${esc(chev[1] || 'congé')}, ${chev[2] ? jma(chev[2]) : '…'} → ${chev[3] ? jma(chev[3]) : '…'}). Clique « Envoyer » encore pour l'envoyer quand même.`);
+    document.getElementById('envoyer').dataset.force = '1'; return;
+  }
+  delete document.getElementById('envoyer').dataset.force;
+  envoyer(c);
+});
+['ini', 'type', 'debut', 'fin'].forEach(id => document.getElementById(id).addEventListener('input', () => { delete document.getElementById('envoyer').dataset.force; }));
+
+function envoyer(c) {
+  const b = document.getElementById('envoyer'); b.disabled = true; b.textContent = 'Envoi…'; msg('', '');
+  const fini = r => {
+    b.disabled = false; b.textContent = 'Envoyer';
+    if (r && r.ok) {
+      msg('ok', r.deja ? 'Ce congé était déjà inscrit.' : r.auto ? 'Envoyé ✓ — il est dans la liste et compte déjà dans l\'horaire.'
+        : 'Envoyé ✓ — il apparaît dans la liste « à confirmer » jusqu\'à ce qu\'il soit confirmé.');
+      document.getElementById('note').value = '';
+      if (CONFIG.url) charger(true);
+    } else msg('x', esc((r && r.erreur) || 'Envoi impossible pour le moment. Réessaie dans quelques minutes.'));
+  };
+  if (!CONFIG.url) {                                   // sample data: add it locally
+    S.d.conges.push([c.ini, c.ctype, c.debut, c.fin, c.note, S.d.auto ? 1 : 0]);
+    S.d.conges.sort((x, y) => ((x[2] || '0') < (y[2] || '0') ? -1 : 1)); setTimeout(() => fini({ ok: 1, auto: S.d.auto }), 300); afficher(); return;
+  }
+  const q = Object.entries(Object.assign({ type: 'equipe', quoi: 'conge_ajout' }, c)).map(([k, x]) => k + '=' + encodeURIComponent(x)).join('&');
+  const cb = '__cg' + Date.now(), s = document.createElement('script');
+  const minuterie = setTimeout(() => { delete window[cb]; s.remove(); fini(null); }, 25000);
+  window[cb] = r => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(r); };
+  s.onerror = () => { clearTimeout(minuterie); delete window[cb]; s.remove(); fini(null); };
+  s.src = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + q + '&callback=' + cb;
+  document.head.appendChild(s);
+}
+
+/* ---------- loading ---------- */
+function garder(d) { if (!d || !Array.isArray(d.conges) || !Array.isArray(d.types)) return false; S.d = d; afficher(); return true; }
+function charger(frais) {
+  if (!CONFIG.url) { garder(demo()); return; }
+  if (!frais) { try { garder(JSON.parse(mem.get('data') || 'null')); } catch (e) { /* cache illisible */ } }
+  const u = CONFIG.url + (CONFIG.url.includes('?') ? '&' : '?') + 'type=equipe&quoi=conges';
+  const ko = () => { if (!S.d) { document.getElementById('etat').innerHTML = '<span class="err">Liste indisponible pour le moment.</span>';
+    document.getElementById('liste').innerHTML = '<div class="vide">Liste des congés indisponible. Réessaie dans quelques minutes.</div>'; } };
+  fetch(u + '&t=' + Date.now(), { credentials: 'omit', cache: 'no-store' }).then(r => r.json())
+    .then(d => { if (!garder(d)) throw 0; mem.set('data', JSON.stringify(d)); })
+    .catch(() => {
+      const cb = '__cgl' + Date.now(), s = document.createElement('script');
+      window[cb] = d => { delete window[cb]; s.remove(); if (garder(d)) mem.set('data', JSON.stringify(d)); else ko(); };
+      s.onerror = () => { s.remove(); ko(); };
+      s.src = u + '&callback=' + cb; document.head.appendChild(s);
+    });
+}
+function demo() {
+  const y = Number(AUJ.slice(0, 4));
+  return { at: AUJ + ' 12:00', types: ['Autofinancé', 'Parental', 'Formation / affectation', 'Sans solde', 'Retraite / départ', 'Fin de contrat', 'Autre'],
+    gens: 'QA QB QC QD QE QF QG QH QJ QK QL QM'.split(' '),
+    conges: [['QK', 'Parental', `${y}-09-01`, `${y + 1}-03-31`, '', 1], ['QD', 'Congé prolongé', `${y}-12-21`, '', '', 1],
+      ['QA', 'Fin de contrat', `${y + 1}-01-07`, '', '', 1], ['QB', 'Autofinancé', `${y + 1}-11-15`, `${y + 2}-05-15`, '', 1],
+      ['QC', 'Autofinancé', `${y + 2}-02-15`, `${y + 2}-10-15`, '', 1], ['QE', 'Formation / affectation', `${y + 1}-04-06`, `${y + 1}-06-26`, 'Cours à Cornwall', 0]], auto: 0 };
+}
+charger();
+</script>
+</body>
+</html>
