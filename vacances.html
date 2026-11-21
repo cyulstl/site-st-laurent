@@ -398,7 +398,7 @@ function afficherDemande() {
   const alt = garde('alt'), note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
     `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
-    `À ton tour, ta demande est inscrite tout de suite dans la feuille et ton ✓ est coché (UK en reçoit une copie). Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
+    `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
     (r[1] ? `<br><b>Règle du tour ${g.tour} :</b> ${esc(r[1])}` : '') + '</div>' +
     ((CONFIG.regles[g.tour] || { jours: true }).jours ? '' : `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>`) +
     boiteCode();
@@ -610,6 +610,7 @@ function envoyer(rien) {
       ['alt', 'note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
       S.sel.clear(); afficherGrille(); afficherDemande();
       if (r.statut === 'inscrite') msg('ok', rien ? 'C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.' : 'Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.');
+      else if (r.statut === 'attente' && r.confirmation) msg('ok', 'Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.');
       else if (r.statut === 'attente') msg('ok', `En file d'attente ✓ — ${r.avant ? `${r.avant} personne${r.avant > 1 ? 's' : ''} avant toi. ` : ''}Ta demande s'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.` +
         (r.raisons && r.raisons.length ? ` <b>Attention : en ce moment, elle ne passerait pas</b> (${esc(r.raisons.join(' ; '))}).` : ''));
       else if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${esc((r.raisons || []).join(' ; '))}. C'est toujours ton tour.`);
