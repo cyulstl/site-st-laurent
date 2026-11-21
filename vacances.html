@@ -198,6 +198,13 @@ const dateDe = k => ymd(new Date(utc(S.d.debut).getTime() + k * 864e5));
 const idxDe = d => Math.round((utc(d) - utc(S.d.debut)) / 864e5);
 const grp = () => S.d.groupes[S.g];
 const moiDe = () => { for (const [gi, g] of S.d.groupes.entries()) { const p = g.gens.find(x => x.i === S.moi); if (p) return { gi, g, p }; } return null; };
+// days chosen but not sent yet: kept on this device (per initials) until sent, so a reload doesn't lose them
+const selGarder = () => { if (S.moi && S.d) mem.set('sel.' + S.moi, S.sel.size ? JSON.stringify([...S.sel].map(dateDe)) : ''); };
+function selReprendre() {
+  S.sel = new Set();
+  if (!S.moi || !S.d) return;
+  try { (JSON.parse(mem.get('sel.' + S.moi) || '[]') || []).map(idxDe).filter(k => k >= 0 && k < S.d.n).forEach(k => S.sel.add(k)); } catch (e) { /* illisible */ }
+}
 const estVac = v => /^\d+$/.test(String(v || ''));
 // base 5-4 pattern of a person (work = true), from the cycle start date
 function baseTravail(p, k) { if (!p.cy) return null; return mod9(k - idxDe(p.cy)) < 5; }
@@ -414,6 +421,7 @@ function afficherDemande() {
         `<button data-enlever="${i}">enlever</button></div>`;
     }).join('') + '</div>';
   }
+  if (a.cycles.length && !S.envoi) h += '<div class="avis w" id="pasEnvoye">Pas encore envoyée : clique « Envoyer ma demande » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.</div>';
   h += `<label class="t">Si ma demande ne passe plus quand mon tour arrive, je prendrais plutôt (UK s'en occupe) :` +
     `<textarea id="alt" placeholder="ex. le cycle suivant, ou rien">${esc(alt)}</textarea></label>` +
     `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
@@ -477,6 +485,7 @@ function afficherEchange() {
     h += '<div class="blocs">' + S.ech.map((l, i) => `<div class="bloc"><b>${esc(jour(l.d))}</b><span>${esc(l.qui)} travaille à la place de ${esc(l.pour)}</span>` +
       verifEchange(g, l).map(([n, t]) => n === 'ok' ? '<span class="m ok">✓</span>' : `<span class="m ${n}">${n === 'x' ? '✗' : '⚠'} ${esc(t)}</span>`).join('') +
       `<button data-echenl="${i}">enlever</button></div>`).join('') + '</div>';
+    if (S.sel.size) h += '<div class="avis w">Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer ma demande » dans « Ma demande ».</div>';
     h += `<label class="t">Note pour UK (facultatif)<textarea id="echNote">${esc(F.note || '')}</textarea></label>` +
       (S.code ? '' : '<div class="aide" style="margin-top:8px">Entre d\'abord ton code personnel dans « Ma demande ».</div>') +
       `<div class="actions"><button id="echEnvoyer"${!S.ech.length || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ${S.ech.length > 1 ? 'les échanges' : 'l\'échange'}</button>` +
@@ -506,7 +515,7 @@ function envoyerEchange() {
     S.envoi = false;
     if (r && r.ok) { const n = S.ech.length; S.ech = []; S.echF = { d: '', qui: '', pour: S.moi }; afficherEchange();
       if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${(r.raisons || []).join(' ; ')}`);
-      else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.`); charger(true); } }
+      else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.` + (S.sel.size ? ' Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer ma demande ».' : '')); charger(true); } }
     else if (codeRefuse(r)) { afficherEchange(); msg('x', r.erreur); }
     else { afficherEchange(); msg('x', (r && r.erreur) || 'Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.'); }
   });
@@ -549,7 +558,7 @@ function jsonp(u, fini) {
 document.addEventListener('click', e => {
   const t = e.target;
   const g = t.closest('[data-g]');
-  if (g) { S.g = +g.dataset.g; S.sel.clear(); afficher(); return; }
+  if (g) { S.g = +g.dataset.g; afficher(); return; }
   const mo = t.closest('[data-mois]');
   if (mo) { const c = document.getElementById('m' + mo.dataset.mois), el = document.getElementById('grille');
     // measured on screen: the sticky columns' offsetLeft moves with the scroll, so it can't be used
@@ -563,11 +572,11 @@ document.addEventListener('click', e => {
     const ks = unJour(mm.g) ? [k] : cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
     const tous = ks.every(x => S.sel.has(x));
     ks.forEach(x => (tous ? S.sel.delete(x) : S.sel.add(x)));
-    S.msgDem = ['', ''];
-    afficherGrille(); afficherDemande(); return;
+    S.msgDem = ['', '']; selGarder();
+    afficherGrille(); afficherDemande(); afficherEchange(); return;
   }
   const enl = t.closest('[data-enlever]');
-  if (enl) { const a = analyse(); (a.cycles[+enl.dataset.enlever] || { ks: [] }).ks.forEach(k => S.sel.delete(k)); afficherGrille(); afficherDemande(); return; }
+  if (enl) { const a = analyse(); (a.cycles[+enl.dataset.enlever] || { ks: [] }).ks.forEach(k => S.sel.delete(k)); selGarder(); afficherGrille(); afficherDemande(); afficherEchange(); return; }
   if (t.id === 'envoyer') envoyer(false);
   if (t.id === 'rien') envoyer(true);
   if (t.id === 'codeOk') validerCode();
@@ -587,7 +596,7 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => { if (e.target.id === 'codeIn' && e.key === 'Enter') validerCode(); });
 document.addEventListener('change', e => {
   if (e.target.id === 'moi') {
-    S.moi = e.target.value; mem.set('moi', S.moi); S.sel.clear(); S.ech = []; S.echF = { d: '', qui: '', pour: S.moi };
+    S.moi = e.target.value; mem.set('moi', S.moi); selReprendre(); S.ech = []; S.echF = { d: '', qui: '', pour: S.moi };
     S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
     const mm = moiDe(); if (mm) S.g = mm.gi;
     afficher();
@@ -608,7 +617,7 @@ function envoyer(rien) {
     S.envoi = false;
     if (r && r.ok) {
       ['alt', 'note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
-      S.sel.clear(); afficherGrille(); afficherDemande();
+      S.sel.clear(); selGarder(); afficherGrille(); afficherDemande();
       if (r.statut === 'inscrite') msg('ok', rien ? 'C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.' : 'Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.');
       else if (r.statut === 'attente' && r.confirmation) msg('ok', 'Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.');
       else if (r.statut === 'attente') msg('ok', `En file d'attente ✓ — ${r.avant ? `${r.avant} personne${r.avant > 1 ? 's' : ''} avant toi. ` : ''}Ta demande s'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.` +
@@ -627,9 +636,9 @@ function garder(d) {
   if (!d || !Array.isArray(d.groupes) || !d.debut) return false;
   const premier = !S.d;
   S.d = d;
-  if (premier) { const mm = moiDe(); if (mm) S.g = mm.gi; }
+  if (premier) { const mm = moiDe(); if (mm) S.g = mm.gi; selReprendre(); }
   // a picked day that is now in the sheet (mine) leaves my request
-  const mm = moiDe(); if (mm) [...S.sel].forEach(k => { if (estVac(mm.p.j[k])) S.sel.delete(k); });
+  const mm = moiDe(); if (mm) { const n = S.sel.size; [...S.sel].forEach(k => { if (estVac(mm.p.j[k])) S.sel.delete(k); }); if (S.sel.size !== n) selGarder(); }
   afficher(); return true;
 }
 function charger(frais) {
