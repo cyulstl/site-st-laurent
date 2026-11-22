@@ -131,6 +131,10 @@
   .ovconf { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #f4c7c3; background: #fce8e6; border-radius: 8px; color: #5f1410; font-size: 14px; line-height: 1.45; }
   .ovconf .actions { margin-top: 8px; }
   .actions[hidden] { display: none; }
+  .prog { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: #e8eaed; overflow: hidden; vertical-align: middle; margin-right: 6px; position: relative; }
+  .prog-b { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 3px; background: var(--accent, #1a73e8); animation: prog 1.2s ease-in-out infinite; }
+  @keyframes prog { 0% { left: -40%; } 100% { left: 100%; } }
+  .prog-n { color: var(--muted); font-size: 12px; }
   .bloc button { margin-left: auto; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12.5px; }
   .dem label.t { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
   .dem textarea { width: 100%; min-height: 44px; margin-top: 3px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
@@ -542,9 +546,9 @@ function envoyerEchange() {
     .map(([l, m]) => `${l.d} ${l.qui}>${l.pour} : ${m.map(x => x[1]).join(', ')}`).join(' ; ');
   S.envoi = true; afficherEchange();
   const msg = (cls, t) => { S.msgEch = [cls, esc(t)]; const m = document.getElementById('echMsg'); if (m) { m.className = 'msg ' + cls; m.textContent = t; } };
-  msg('', 'Envoi…');
+  const stop = progres('echMsg', ['Envoi…', 'Vérification de ton code…', 'Vérification de l\'échange…', 'Inscription dans la grille…', 'Copie à UK…', 'Presque fini…']);
   appel({ quoi: 'vac_echange', ini: S.moi, code: S.code, ech: S.ech.map(l => `${l.d}:${l.qui}>${l.pour}`).join(','), note: S.echF.note || '', avert }, r => {
-    S.envoi = false;
+    stop(); S.envoi = false;
     if (r && r.ok) { const n = S.ech.length; S.ech = []; S.echF = { d: '', qui: '', pour: S.moi }; afficherEchange();
       if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${(r.raisons || []).join(' ; ')}`);
       else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.` + (S.sel.size ? ' Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer ma demande ».' : '')); charger(true); } }
@@ -648,6 +652,15 @@ document.addEventListener('change', e => {
   else if (e.target.id === 'codeRet') S.codeRet = e.target.checked;
 });
 
+// while a request is on its way (10 to 20 s: the server checks the code, re-reads the grid, writes, emails UK):
+// a moving bar and the steps, so the wait doesn't look stuck; the real answer replaces it
+function progres(id, etapes) {
+  const el = () => document.getElementById(id); let x = 0, fini = false;
+  const dessine = () => { const m = el(); if (!m || fini) return; m.className = 'msg';
+    m.innerHTML = `<span class="prog"><span class="prog-b"></span></span> ${esc(etapes[Math.min(x, etapes.length - 1)])} <span class="prog-n">— ne ferme pas la page</span>`; };
+  dessine(); const t = setInterval(() => { x++; dessine(); }, 3000);
+  return () => { fini = true; clearInterval(t); };
+}
 function envoyer(rien) {
   const a = analyse(); if (!a) return;
   // a pick that uses the overlap: one more click, so nobody spends it by accident
@@ -659,9 +672,9 @@ function envoyer(rien) {
   const c = { ini: S.moi, code: S.code, tour: String(a.g.tour), jours: rien ? '' : [...S.sel].sort((x, y) => x - y).map(dateDe).join(','), rien: rien ? '1' : '',
     alt: '', note: document.getElementById('note').value, avert };
   S.envoi = true; afficherDemande(); document.getElementById('note').value = c.note;
-  msg('', 'Envoi…');
+  const stop = progres('msg', ['Envoi…', 'Vérification de ton code…', 'Vérification des règles du tour…', rien ? 'Ton tour est noté…' : 'Inscription de tes jours…', 'Copie à UK…', 'Presque fini…']);
   const fini = r => {
-    S.envoi = false;
+    stop(); S.envoi = false;
     if (r && r.ok) {
       ['note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
       S.sel.clear(); selGarder(); afficherGrille(); afficherDemande();
