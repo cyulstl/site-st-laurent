@@ -262,18 +262,14 @@ function afficher() {
 
 function afficherTour() {
   const g = grp(), qui = aQui(g), r = (S.d.regles || {})[String(g.tour)] || [];
-  const actifs = g.gens.filter(p => !p.form && p.cy);
-  const finis = actifs.filter(p => p.fini).map(p => p.i);
-  const apres = qui ? actifs.slice(actifs.indexOf(qui) + 1).filter(p => !p.fini).slice(0, 6).map(p => p.i) : [];
   const moiTour = qui && qui.i === S.moi;
   document.getElementById('tour').innerHTML = `<div class="tour${moiTour ? ' moi-tour' : ''}">` +
-    `<b>${esc(g.nom)} — tour ${g.tour}${g.nbTours ? ` sur ${g.nbTours}` : ''}</b>` +
+    `<b>${esc(g.nom)} — tour ${g.tour}</b>` +
     (r[0] && !/à fournir/.test(r[0]) ? ` <span class="regle">· ${esc(r[0])}</span>` : '') + '<br>' +
-    (qui ? `${moiTour ? '<b class="qui">C\'est ton tour !</b>' : `C'est au tour de <b class="qui">${esc(qui.i)}</b> <span class="regle">(${esc(qui.o)})</span>`}` +
-      (apres.length ? `<br><span class="suivants">Ensuite : ${apres.map(esc).join(', ')}${finis.length ? ` · ont fini ce tour : ${finis.map(esc).join(', ')}` : ''}</span>` : '')
+    (qui ? `${moiTour ? '<b class="qui">C\'est ton tour !</b>' : `C'est au tour de <b class="qui">${esc(qui.i)}</b> <span class="regle">(${esc(qui.o)})</span>`}`
       : 'Tout le monde a fini ce tour.') +
     ((g.attente || []).length ? `<br><span class="suivants">Demandes en file d'attente (inscrites automatiquement à leur tour) : ${g.attente.map(esc).join(', ')}</span>` : '') +
-    `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne (1 de plus que le maximum, 1 par jour)</span></div>`;
+    `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne</span></div>`;
 }
 
 function afficherGrille() {
