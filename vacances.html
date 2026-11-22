@@ -201,12 +201,13 @@ const mem = {
   set(k, v) { try { localStorage.setItem('vac.' + k, v); } catch (e) { /* pas de stockage */ } },
 };
 // S.d = data of the sheet, S.g = group shown (index), S.moi = my initials, S.sel = Set of day indexes I picked,
-// S.unParUn = click single days instead of whole cycles (always, in a round of single days)
+// S.unParUn = { round: true/false } : click single days instead of whole cycles, as chosen by the person for that round;
+// not chosen: on by default where incomplete cycles are allowed (round 3), off in rounds 1-2; always in a round of single days
 // initials given by the link of the « c'est ton tour » email (…&moi=GE, put in by the server) win over the remembered ones
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('regle-d')) mem.set('regle', e.target.open ? '1' : ''); }, true);
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
-const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: false, envoi: false };
+const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false };
 // personal code (4 digits from UK), required to send anything; kept on this device if « retenir » is ticked
 S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeRet = true; S.codeSaisie = '';
 S.msgDem = ['', '']; S.msgEch = ['', ''];           // last result shown under the buttons (kept when the grid reloads)
@@ -256,7 +257,8 @@ function etatJour(g, p, k) {
   return 'complet';
 }
 
-const unJour = g => S.unParUn || !!(CONFIG.regles[g.tour] || { jours: true }).jours;
+const unParUnDe = g => (g.tour in S.unParUn ? S.unParUn[g.tour] : (CONFIG.regles[g.tour] || {}).complet === false);
+const unJour = g => !!(CONFIG.regles[g.tour] || { jours: true }).jours || unParUnDe(g);
 
 /* ---------- rendering ---------- */
 // « choisir les jours un par un » : right above the months, for my row, in a round of cycles
@@ -264,8 +266,9 @@ function afficherMode() {
   const el = document.getElementById('modebar'), mm = S.d && moiDe();
   const ok = mm && mm.gi === S.g && !(CONFIG.regles[mm.g.tour] || { jours: true }).jours;
   el.hidden = !ok; if (!ok) { el.innerHTML = ''; return; }
-  el.innerHTML = `<label class="${S.unParUn ? 'on' : ''}"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> Choisir les jours un par un (cycle incomplet)</label>` +
-    `<span class="aide">${S.unParUn ? 'Chaque clic ajoute ou enlève un seul jour.' : 'Sinon, un clic prend tout le cycle (sans les jours déjà au maximum ; clique un de ces jours pour utiliser ton overlap).'}</span>`;
+  const on = unParUnDe(mm.g);
+  el.innerHTML = `<label class="${on ? 'on' : ''}"><input type="checkbox" id="unParUn"${on ? ' checked' : ''}> Choisir les jours un par un (cycle incomplet)</label>` +
+    `<span class="aide">${on ? 'Chaque clic ajoute ou enlève un seul jour.' : 'Sinon, un clic prend tout le cycle (sans les jours déjà au maximum ; clique un de ces jours pour utiliser ton overlap).'}</span>`;
 }
 function afficher() {
   if (!S.d) return;
@@ -641,7 +644,7 @@ document.addEventListener('change', e => {
     S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
     const mm = moiDe(); if (mm) S.g = mm.gi;
     afficher();
-  } else if (e.target.id === 'unParUn') { S.unParUn = e.target.checked; afficherMode(); afficherDemande(); }
+  } else if (e.target.id === 'unParUn') { const mm = moiDe(); if (mm) S.unParUn[mm.g.tour] = e.target.checked; afficherMode(); afficherDemande(); }
   else if (e.target.id === 'codeRet') S.codeRet = e.target.checked;
 });
 
