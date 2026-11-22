@@ -214,6 +214,9 @@
   .pop .sq { width: 12px; height: 12px; border-radius: 3px; border-left: 3px solid; flex: none; }
   .pop .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .pop.large { width: 340px; }
+  .beta { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; background: #f57c00; color: #fff;
+          font-size: 10px; font-weight: 600; line-height: 16px; letter-spacing: .3px; text-transform: uppercase; vertical-align: 1px; }
+  .plan-beta { margin: 0 0 8px; padding: 6px 9px; border-radius: 6px; background: #fff3e0; color: #8a4b00; font-size: 12px; line-height: 1.4; }
   .pop.plan { width: 380px; max-height: calc(100vh - 16px); overflow: auto; }
   .pop.plan.sheet { width: auto; max-height: 85vh; }
   .plan-nav { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; color: var(--muted); }
@@ -290,7 +293,7 @@
       <div class="seg" role="group" aria-label="Vue">
         <button data-v="mois">Mois</button><button data-v="semaine"><span class="lg-sem">Semaine</span><span class="ct-sem">Sem.</span></button><button data-v="jour">Jour</button>
       </div>
-      <button class="btn" id="bPlan" title="Qui est assis quand, pour la journée affichée">Plan du jour</button>
+      <button class="btn" id="bPlan" title="Qui est assis quand, pour la journée affichée — en test : un brouillon à vérifier">Plan du jour <span class="beta">bêta</span></button>
       <button class="btn" id="bLeg" hidden title="Ce que veulent dire les couleurs">Légende</button>
       <button class="btn" id="bPlein" hidden
          title="Ouvrir l'horaire dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; <span class="lg-plein">Plein écran</span></button>
@@ -1409,7 +1412,8 @@ function ouvrirPlan(el) {
   S.planJour = day;
   const { pris, hors } = gensPlan(day), sans = S.planSans[day] || [];
   const nb = pris.length - pris.filter(p => sans.includes(p.i)).length;
-  const html = `<h3>Plan du jour</h3>` +
+  const html = `<h3>Plan du jour <span class="beta">bêta</span></h3>` +
+    `<div class="plan-beta">En test : un brouillon calculé à partir de l'horaire ESS, pas le plan officiel. Le superviseur décide.</div>` +
     `<div class="plan-nav"><button data-plan="prec" aria-label="Jour précédent">&#8249;</button><b>${esc(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` +
     `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
     `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>` +
