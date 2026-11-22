@@ -121,7 +121,10 @@
   .bloc b { color: #202124; }
   .bloc .nb { color: var(--muted); font-size: 12.5px; }
   .bloc .m { font-size: 12.5px; }
-  .bloc .m.w { color: var(--wait); } .bloc .m.x { color: var(--x); } .bloc .m.ok { color: var(--ok); }
+  .bloc .m.w { color: var(--wait); } .bloc .m.x { color: var(--x); } .bloc .m.ok { color: var(--ok); } .bloc .m.ov { color: #c5221f; font-weight: 500; }
+  .ovconf { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #f4c7c3; background: #fce8e6; border-radius: 8px; color: #5f1410; font-size: 14px; line-height: 1.45; }
+  .ovconf .actions { margin-top: 8px; }
+  .actions[hidden] { display: none; }
   .bloc button { margin-left: auto; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12.5px; }
   .dem label.t { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
   .dem textarea { width: 100%; min-height: 44px; margin-top: 3px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
@@ -207,7 +210,7 @@ const idxDe = d => Math.round((utc(d) - utc(S.d.debut)) / 864e5);
 const grp = () => S.d.groupes[S.g];
 const moiDe = () => { for (const [gi, g] of S.d.groupes.entries()) { const p = g.gens.find(x => x.i === S.moi); if (p) return { gi, g, p }; } return null; };
 // days chosen but not sent yet: kept on this device (per initials) until sent, so a reload doesn't lose them
-const selGarder = () => { if (S.moi && S.d) mem.set('sel.' + S.moi, S.sel.size ? JSON.stringify([...S.sel].map(dateDe)) : ''); };
+const selGarder = () => { S.ovConf = false; S.ovOk = false; if (S.moi && S.d) mem.set('sel.' + S.moi, S.sel.size ? JSON.stringify([...S.sel].map(dateDe)) : ''); };
 function selReprendre() {
   S.sel = new Set();
   if (!S.moi || !S.d) return;
@@ -378,13 +381,19 @@ function analyse() {
     const etats = ks.map(k => etatJour(g, p, k));
     const nOv = etats.filter(e => e === 'ovlp').length, nKo = etats.filter(e => e === 'complet').length;
     if (nKo) msgs.push(['x', `${nKo} jour${nKo > 1 ? 's' : ''} déjà complet${nKo > 1 ? 's' : ''}`]);
-    if (nOv) msgs.push(['w', `${nOv} jour${nOv > 1 ? 's' : ''} au maximum : il faudrait ton overlap`]);
+    const ovKs = ks.filter((k, i) => etats[i] === 'ovlp');
     const libres = x.c.filter(k => !S.sel.has(k) && etatJour(g, p, k) === 'libre');
     if (complet && libres.length) msgs.push(['w', `cycle incomplet alors que ${libres.length} autre${libres.length > 1 ? 's' : ''} jour${libres.length > 1 ? 's sont libres' : ' est libre'} (${libres.map(k => jour(dateDe(k))).join(', ')})`]);
     if (parCycles && ks.length < R.minJours) msgs.push(['w', `moins de ${R.minJours} jours`]);
     if (!msgs.length) msgs.push(['ok', !parCycles ? 'ok' : ks.length === 5 ? 'cycle complet' : complet ? 'cycle incomplet : les autres jours sont déjà pris' : 'cycle incomplet (permis à ce tour)']);
-    return { ks, msgs };
+    return { ks, msgs, ovKs };
   });
+  // days already at the maximum: within the overlaps left, the overlap is simply used (the pick goes through);
+  // beyond, it goes to UK
+  const nOv = cycles.reduce((s, c) => s + c.ovKs.length, 0), ovOk = nOv <= p.ov;
+  cycles.forEach(c => { if (c.ovKs.length) c.msgs.push(ovOk
+    ? ['ov', `${c.ovKs.map(k => jour(dateDe(k))).join(', ')} : déjà au maximum, ton overlap sera utilisé`]
+    : ['x', `${c.ovKs.length} jour${c.ovKs.length > 1 ? 's' : ''} au maximum : il faudrait ton overlap`]); });
   const gen = [];
   if (parCycles && cycles.length > R.maxCycles) gen.push(['w', `${cycles.length} cycles : au tour ${g.tour}, c'est ${R.maxCycles} au maximum`]);
   const solde = parseFloat(String(p.solde).replace(',', '.'));
@@ -393,9 +402,10 @@ function analyse() {
   const qui = aQui(g);
   if (p.fini) gen.push(['x', 'tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour']);
   else if (qui && qui !== p) gen.push(['w', `ce n'est pas encore ton tour (c'est au tour de ${qui.i}) : ta demande attendra en file et s'inscrira toute seule à ton tour`]);
-  if (cycles.some(c => c.msgs.some(([n]) => n !== 'ok')) || gen.some(([n, t]) => n === 'x' || / cycles :/.test(t)))
+  if (cycles.some(c => c.msgs.some(([n]) => n !== 'ok' && n !== 'ov')) || gen.some(([n, t]) => n === 'x' || / cycles :/.test(t)))
     gen.push(['w', 'une demande qui ne respecte pas les règles n\'est pas inscrite : elle est envoyée à UK, qui décide']);
-  return { g, p, cycles, gen };
+  const ovJours = ovOk ? cycles.flatMap(c => c.ovKs).sort((x, y) => x - y) : [];
+  return { g, p, cycles, gen, ovJours };
 }
 const nOvTot = cycles => cycles.reduce((s, c) => s + c.ks.filter(k => etatJour(S.d.groupes[moiDe().gi], moiDe().p, k) === 'ovlp').length, 0);
 
@@ -421,7 +431,7 @@ function afficherDemande() {
     h += '<div class="blocs">' + a.cycles.map((c, i) => {
       const bs = blocs(c.ks).map(([x, y]) => x === y ? jour(dateDe(x)) : `${jour(dateDe(x))} → ${jour(dateDe(y))}`).join(', ');
       return `<div class="bloc"><b>${esc(bs)}</b><span class="nb">${c.ks.length} jour${c.ks.length > 1 ? 's' : ''}</span>` +
-        c.msgs.map(([n, t]) => `<span class="m ${n}">${n === 'ok' ? '✓ ' : n === 'x' ? '✗ ' : '⚠ '}${esc(t)}</span>`).join('') +
+        c.msgs.map(([n, t]) => `<span class="m ${n}">${n === 'ok' ? '✓ ' : n === 'x' ? '✗ ' : n === 'ov' ? '↑ ' : '⚠ '}${esc(t)}</span>`).join('') +
         `<button data-enlever="${i}">enlever</button></div>`;
     }).join('') + '</div>';
   }
@@ -429,7 +439,10 @@ function afficherDemande() {
   h += `<label class="t">Si ma demande ne passe plus quand mon tour arrive, je prendrais plutôt (UK s'en occupe) :` +
     `<textarea id="alt" placeholder="ex. le cycle suivant, ou rien">${esc(alt)}</textarea></label>` +
     `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
-    `<div class="actions"><button id="envoyer"${!S.sel.size || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ma demande</button>` +
+    (S.ovConf ? `<div class="ovconf" id="ovconf"><b>Ta demande utilise ton overlap</b> : ${a.ovJours.map(k => esc(jour(dateDe(k)))).join(', ')} ` +
+      `${a.ovJours.length > 1 ? 'sont' : 'est'} déjà au maximum. Il te reste ${a.p.ov} overlap${a.p.ov > 1 ? 's' : ''} pour l'année ; une fois utilisé, il ne revient pas.` +
+      `<div class="actions"><button id="ovOui">Oui, utiliser mon overlap et envoyer</button><button class="sec" id="ovNon">Annuler</button></div></div>` : '') +
+    `<div class="actions"${S.ovConf ? ' hidden' : ''}><button id="envoyer"${!S.sel.size || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ma demande</button>` +
     `<button class="sec" id="rien"${S.envoi || !S.code ? ' disabled' : ''}>Je ne prends rien à ce tour-ci</button><span class="msg ${S.msgDem[0]}" id="msg">${S.msgDem[1]}</span></div>`;
   el.innerHTML = h;
 }
@@ -582,6 +595,8 @@ document.addEventListener('click', e => {
   const enl = t.closest('[data-enlever]');
   if (enl) { const a = analyse(); (a.cycles[+enl.dataset.enlever] || { ks: [] }).ks.forEach(k => S.sel.delete(k)); selGarder(); afficherGrille(); afficherDemande(); afficherEchange(); return; }
   if (t.id === 'envoyer') envoyer(false);
+  if (t.id === 'ovOui') { S.ovOk = true; envoyer(false); }
+  if (t.id === 'ovNon') { S.ovConf = false; S.ovOk = false; afficherDemande(); }
   if (t.id === 'rien') envoyer(true);
   if (t.id === 'codeOk') validerCode();
   if (t.id === 'codeOubli') { mem.set('code.' + S.moi, ''); S.code = ''; afficherDemande(); afficherEchange(); }
@@ -610,6 +625,9 @@ document.addEventListener('change', e => {
 
 function envoyer(rien) {
   const a = analyse(); if (!a) return;
+  // a pick that uses the overlap: one more click, so nobody spends it by accident
+  if (!rien && a.ovJours.length && !S.ovOk) { S.ovConf = true; afficherDemande(); const b = document.getElementById('ovconf'); if (b) b.scrollIntoView({ block: 'nearest' }); return; }
+  S.ovConf = false; S.ovOk = false;
   const msg = (cls, t) => { S.msgDem = [cls, t]; const m = document.getElementById('msg'); if (m) { m.className = 'msg ' + cls; m.innerHTML = t; } };
   const avert = [...a.gen.map(x => x[1]), ...a.cycles.flatMap(c => c.msgs.filter(([n]) => n !== 'ok')
     .map(([, t]) => `${blocs(c.ks).map(([x, y]) => dateDe(x) + (x === y ? '' : '→' + dateDe(y))).join(', ')} : ${t}`))].join(' ; ');
