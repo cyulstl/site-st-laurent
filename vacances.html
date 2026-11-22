@@ -108,6 +108,9 @@
   .dem { margin: 14px 16px 24px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
   .dem h2 { font-size: 16px; font-weight: 500; color: #202124; margin: 0 0 6px; }
   .dem .aide { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .regle-d { margin-top: 6px; }
+  .regle-d summary { cursor: pointer; font-weight: 500; color: var(--fg); width: max-content; }
+  .regle-d[open] summary { margin-bottom: 2px; }
   .dem .avis { margin: 8px 0; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
   .avis.w { background: #fef7e0; color: #7a4a00; }
   .avis.ok { background: #e6f4ea; color: #0d652d; }
@@ -190,6 +193,7 @@ const mem = {
 // S.d = data of the sheet, S.g = group shown (index), S.moi = my initials, S.sel = Set of day indexes I picked,
 // S.unParUn = click single days instead of whole cycles (always, in a round of single days)
 // initials given by the link of the « c'est ton tour » email (…&moi=GE, put in by the server) win over the remembered ones
+document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('regle-d')) mem.set('regle', e.target.open ? '1' : ''); }, true);
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
 const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: false, envoi: false };
@@ -406,7 +410,7 @@ function afficherDemande() {
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
     `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
     `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
-    (r[1] ? `<br><b>Règle du tour ${g.tour} :</b> ${esc(r[1])}` : '') + '</div>' +
+    (r[1] ? `<details class="regle-d"${mem.get('regle') ? ' open' : ''}><summary>Règle du tour ${g.tour}</summary>${esc(r[1])}</details>` : '') + '</div>' +
     ((CONFIG.regles[g.tour] || { jours: true }).jours ? '' : `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>`) +
     boiteCode();
   if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
