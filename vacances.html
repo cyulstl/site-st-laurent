@@ -416,7 +416,7 @@ function afficherDemande() {
   if (mm.gi !== S.g) { el.innerHTML = `<h2>Ma demande</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
   const a = analyse(), g = mm.g, r = (S.d.regles || {})[String(g.tour)] || [];
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
-  const alt = garde('alt'), note = garde('note');
+  const note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
     `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
     `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
@@ -436,9 +436,7 @@ function afficherDemande() {
     }).join('') + '</div>';
   }
   if (a.cycles.length && !S.envoi) h += '<div class="avis w" id="pasEnvoye">Pas encore envoyée : clique « Envoyer ma demande » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.</div>';
-  h += `<label class="t">Si ma demande ne passe plus quand mon tour arrive, je prendrais plutôt (UK s'en occupe) :` +
-    `<textarea id="alt" placeholder="ex. le cycle suivant, ou rien">${esc(alt)}</textarea></label>` +
-    `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
+  h += `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
     (S.ovConf ? `<div class="ovconf" id="ovconf"><b>Ta demande utilise ton overlap</b> : ${a.ovJours.map(k => esc(jour(dateDe(k)))).join(', ')} ` +
       `${a.ovJours.length > 1 ? 'sont' : 'est'} déjà au maximum. Il te reste ${a.p.ov} overlap${a.p.ov > 1 ? 's' : ''} pour l'année ; une fois utilisé, il ne revient pas.` +
       `<div class="actions"><button id="ovOui">Oui, utiliser mon overlap et envoyer</button><button class="sec" id="ovNon">Annuler</button></div></div>` : '') +
@@ -632,13 +630,13 @@ function envoyer(rien) {
   const avert = [...a.gen.map(x => x[1]), ...a.cycles.flatMap(c => c.msgs.filter(([n]) => n !== 'ok')
     .map(([, t]) => `${blocs(c.ks).map(([x, y]) => dateDe(x) + (x === y ? '' : '→' + dateDe(y))).join(', ')} : ${t}`))].join(' ; ');
   const c = { ini: S.moi, code: S.code, tour: String(a.g.tour), jours: rien ? '' : [...S.sel].sort((x, y) => x - y).map(dateDe).join(','), rien: rien ? '1' : '',
-    alt: document.getElementById('alt').value, note: document.getElementById('note').value, avert };
-  S.envoi = true; afficherDemande(); document.getElementById('alt').value = c.alt; document.getElementById('note').value = c.note;
+    alt: '', note: document.getElementById('note').value, avert };
+  S.envoi = true; afficherDemande(); document.getElementById('note').value = c.note;
   msg('', 'Envoi…');
   const fini = r => {
     S.envoi = false;
     if (r && r.ok) {
-      ['alt', 'note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
+      ['note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
       S.sel.clear(); selGarder(); afficherGrille(); afficherDemande();
       if (r.statut === 'inscrite') msg('ok', rien ? 'C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.' : 'Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.');
       else if (r.statut === 'attente' && r.confirmation) msg('ok', 'Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.');
