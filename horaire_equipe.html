@@ -100,6 +100,9 @@
          margin: 2px 0 2px; border-radius: 12px; font-size: 12px; font-weight: 500; cursor: pointer; padding: 0 4px; }
   .num:hover { background: var(--soft); }
   .today .num { background: var(--accent); color: #fff; }
+  /* the weekday next to the date, a shade lighter (zoomed in on a phone, the column headers are out of sight) */
+  .jsem { font-size: 11px; color: #80868b; margin-left: 2px; white-space: nowrap; }
+  .cell.out .jsem { color: #bdc1c6; }
   /* paid holidays (1.5x): red date + name (list = Setup D:E of the Admin. Worksheet) */
   .cell:not(.today) .num.fer, .cell.out .num.fer { color: var(--ferie); font-weight: 600; }
   .fnom { font-size: 11px; color: var(--ferie); font-weight: 500; margin-left: 4px; white-space: nowrap;
@@ -376,6 +379,7 @@ const addDays = (d, k) => { const x = toUTC(d); x.setUTCDate(x.getUTCDate() + k)
 const dow = d => (toUTC(d).getUTCDay() - CONFIG.debutSemaine + 7) % 7;
 const debutDe = d => addDays(d, -dow(d));                             // first day of d's week
 const estWE = d => toUTC(d).getUTCDay() % 6 === 0;                    // Saturday or Sunday
+const JSEM = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'], utcDow = d => toUTC(d).getUTCDay();
 const firstOfMonth = d => d.slice(0, 8) + '01';
 const addMonths = (d, k) => { const x = toUTC(firstOfMonth(d)); x.setUTCMonth(x.getUTCMonth() + k); return fromUTC(x); };
 const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(toUTC(d));
@@ -569,6 +573,7 @@ function grilleMois(cur, empile) {
     if (estRelache(d)) cls.push('rel');
     h += `<div class="${cls.join(' ')}"${narrow ? ` data-day="${d}"` : ''}>` +
       `<span class="num${S.feries[d] ? ' fer' : ''}" data-day="${d}" title="${S.feries[d] ? 'Férié payé 1,5x : ' + esc(S.feries[d]) + ' · ' : ''}${estRelache(d) ? esc(titreRelache(d)) + ' · ' : ''}Voir la journée">${+d.slice(8)}</span>` +
+      `<span class="jsem" aria-hidden="true">${JSEM[utcDow(d)]}</span>` +
       (S.feries[d] ? `<span class="fnom" title="Férié payé 1,5x">${esc(S.feries[d])}</span>` : '');
     h += narrow ? caseEtroite(d) : caseLarge(d);
     h += '</div>';
