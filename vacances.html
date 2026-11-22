@@ -116,6 +116,12 @@
   .avis.ok { background: #e6f4ea; color: #0d652d; }
   .avis.x { background: #fce8e6; color: #a50e0e; }
   .mode { font-size: 13px; margin: 6px 0; }
+  .modebar { margin: 10px 16px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+  .modebar label { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 2px solid #f57c00; border-radius: 20px;
+                   background: #fff4e5; color: #8a4b00; font-weight: 600; font-size: 14px; cursor: pointer; user-select: none; }
+  .modebar label.on { background: #f57c00; color: #fff; }
+  .modebar input { width: 17px; height: 17px; accent-color: #8a4b00; margin: 0; }
+  .modebar .aide { font-size: 12px; color: var(--muted); }
   .blocs { margin: 8px 0; }
   .bloc { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 0; border-bottom: 1px solid #f0f1f2; }
   .bloc b { color: #202124; }
@@ -164,6 +170,7 @@
   <button class="plein" id="bPlein" hidden title="Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; Plein écran</button>
 </div>
 <div id="tour"></div>
+<div class="modebar" id="modebar" hidden></div>
 <div class="mois" id="mois"></div>
 <div class="grille" id="grille"></div>
 <div class="leg" id="leg"></div>
@@ -252,6 +259,14 @@ function etatJour(g, p, k) {
 const unJour = g => S.unParUn || !!(CONFIG.regles[g.tour] || { jours: true }).jours;
 
 /* ---------- rendering ---------- */
+// « choisir les jours un par un » : right above the months, for my row, in a round of cycles
+function afficherMode() {
+  const el = document.getElementById('modebar'), mm = S.d && moiDe();
+  const ok = mm && mm.gi === S.g && !(CONFIG.regles[mm.g.tour] || { jours: true }).jours;
+  el.hidden = !ok; if (!ok) { el.innerHTML = ''; return; }
+  el.innerHTML = `<label class="${S.unParUn ? 'on' : ''}"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> Choisir les jours un par un (cycle incomplet)</label>` +
+    `<span class="aide">${S.unParUn ? 'Chaque clic ajoute ou enlève un seul jour.' : 'Sinon, un clic prend tout le cycle (sans les jours déjà au maximum ; clique un de ces jours pour utiliser ton overlap).'}</span>`;
+}
 function afficher() {
   if (!S.d) return;
   const d = S.d;
@@ -265,7 +280,7 @@ function afficher() {
   const mois = [];
   for (let k = 0; k < d.n; k++) if (k === 0 || dateDe(k).slice(8) === '01') mois.push(k);
   document.getElementById('mois').innerHTML = mois.map(k => `<button data-mois="${k}">${esc(fmt(dateDe(k), { month: 'short' }).replace('.', ''))}</button>`).join('');
-  afficherTour(); afficherGrille(); afficherLegende(); afficherDemande(); afficherEchange();
+  afficherTour(); afficherMode(); afficherGrille(); afficherLegende(); afficherDemande(); afficherEchange();
   document.getElementById('etat').innerHTML = (CONFIG.url ? '' : '<b class="err">Données d\'exemple</b> · ') +
     `Feuille lue à ${esc(d.at.slice(11))}<button id="maj" title="Relire la feuille maintenant">↻</button>`;
 }
@@ -418,10 +433,9 @@ function afficherDemande() {
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
   const note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
-    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour' : 'tout le cycle de 5 jours'} est ajouté. Clique encore pour l'enlever. ` +
+    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour est ajouté' : 'les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap)'}. Clique encore pour l'enlever. ` +
     `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
     (r[1] ? `<details class="regle-d"${mem.get('regle') ? ' open' : ''}><summary>Règle du tour ${g.tour}</summary>${esc(r[1])}</details>` : '') + '</div>' +
-    ((CONFIG.regles[g.tour] || { jours: true }).jours ? '' : `<label class="mode"><input type="checkbox" id="unParUn"${S.unParUn ? ' checked' : ''}> choisir les jours un par un (cycle incomplet)</label>`) +
     boiteCode();
   if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
   if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.</div>';
@@ -584,9 +598,19 @@ document.addEventListener('click', e => {
   const td = t.closest('tr.moi td.j.cl');
   if (td) {
     const mm = moiDe(), k = +td.dataset.k;
-    const ks = unJour(mm.g) ? [k] : cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
-    const tous = ks.every(x => S.sel.has(x));
-    ks.forEach(x => (tous ? S.sel.delete(x) : S.sel.add(x)));
+    if (unJour(mm.g)) { if (S.sel.has(k)) S.sel.delete(k); else S.sel.add(k); }
+    else {
+      // a cycle: the first click takes every day still free (not the days already at the maximum: those would use
+      // the overlap); a click on such a day of the chosen cycle adds it (overlap), or takes it back; a click on
+      // another day of the chosen cycle drops the whole cycle
+      const cyc = cycleDe(mm.p, k).filter(x => travaille(mm.g, mm.p, x) && !estVac(mm.p.j[x]));
+      const libres = cyc.filter(x => etatJour(mm.g, mm.p, x) === 'libre'), e = etatJour(mm.g, mm.p, k);
+      if (cyc.some(x => S.sel.has(x))) {
+        if (e === 'ovlp') { if (S.sel.has(k)) S.sel.delete(k); else S.sel.add(k); }
+        else cyc.forEach(x => S.sel.delete(x));
+      } else if (libres.length) libres.forEach(x => S.sel.add(x));
+      else if (e === 'ovlp') S.sel.add(k);
+    }
     S.msgDem = ['', '']; selGarder();
     afficherGrille(); afficherDemande(); afficherEchange(); return;
   }
@@ -617,7 +641,7 @@ document.addEventListener('change', e => {
     S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
     const mm = moiDe(); if (mm) S.g = mm.gi;
     afficher();
-  } else if (e.target.id === 'unParUn') { S.unParUn = e.target.checked; afficherDemande(); }
+  } else if (e.target.id === 'unParUn') { S.unParUn = e.target.checked; afficherMode(); afficherDemande(); }
   else if (e.target.id === 'codeRet') S.codeRet = e.target.checked;
 });
 
