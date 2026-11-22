@@ -214,6 +214,20 @@
   .pop .sq { width: 12px; height: 12px; border-radius: 3px; border-left: 3px solid; flex: none; }
   .pop .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .pop.large { width: 340px; }
+  .pop.plan { width: 380px; max-height: calc(100vh - 16px); overflow: auto; }
+  .pop.plan.sheet { width: auto; max-height: 85vh; }
+  .plan-nav { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; color: var(--muted); }
+  .plan-nav b { color: var(--fg); font-weight: 500; flex: 1; text-align: center; }
+  .plan-nav button { border: 1px solid var(--line); background: var(--bg); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; }
+  .pop textarea.plan-txt { width: 100%; box-sizing: border-box; min-height: 260px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+                           padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .plan-act { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+  .plan-act button { border: 0; background: var(--accent); color: #fff; border-radius: 16px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .plan-act span { font-size: 12px; color: var(--ok, #188038); }
+  .plan-gens { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+  .plan-gens label { white-space: nowrap; cursor: pointer; }
+  .plan-gens .hr { color: var(--muted); font-size: 11px; }
+  .plan-hors, .plan-aide { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
   .pop .choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px;
                 max-height: 46vh; overflow-y: auto; margin-top: 4px; }
   .pop .choix label { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px;
@@ -276,6 +290,7 @@
       <div class="seg" role="group" aria-label="Vue">
         <button data-v="mois">Mois</button><button data-v="semaine"><span class="lg-sem">Semaine</span><span class="ct-sem">Sem.</span></button><button data-v="jour">Jour</button>
       </div>
+      <button class="btn" id="bPlan" title="Qui est assis quand, pour la journée affichée">Plan du jour</button>
       <button class="btn" id="bLeg" hidden title="Ce que veulent dire les couleurs">Légende</button>
       <button class="btn" id="bPlein" hidden
          title="Ouvrir l'horaire dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; <span class="lg-plein">Plein écran</span></button>
@@ -337,6 +352,13 @@ const CONFIG = {
   superviseur: { nom: 'Superviseur (S)',             couleur: '#c62828', teinte: '#f9d0d0' },
   stagiaire:   { nom: 'Stagiaire',                   couleur: '#f2b600', teinte: '#fdedb0' },
   tz: 'America/Toronto',
+  // Plan du jour : qui est assis quand (contrôleurs ; superviseurs, stagiaires et formations ne comptent pas)
+  plan: {
+    finAvant: 45, finAvantOT: 30,          // assis jusqu'à 45 min avant la fin du quart (30 min en OT)
+    minPos: [[0, 1], [600, 2], [1140, 1]], // positions au minimum : 1 avant 10 h, 2 de 10 h à 19 h, 1 ensuite (et la nuit)
+    maxPos: 5,
+    coupureNuit: 120,                      // 2 nuits : le 1er jusqu'à 02:00, le 2e ensuite jusqu'au matin
+  },
 };
 
 /* =====================================================================================
@@ -800,6 +822,7 @@ function ouvrirPop(p, el) {
   const pop = document.getElementById('pop'), bg = document.getElementById('popbg');
   const sheet = innerWidth < 640;
   pop.style.setProperty('--c', p.c);
+  pop.classList.toggle('plan', p.cls === 'plan');
   pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + p.html;
   pop.classList.toggle('sheet', sheet);
   pop.classList.toggle('large', !!p.large);
@@ -815,6 +838,7 @@ function ouvrirPop(p, el) {
 }
 
 function fermerPop() {
+  document.getElementById('pop').classList.remove('plan');
   document.getElementById('pop').hidden = true;
   document.getElementById('popbg').hidden = true;
 }
@@ -1225,6 +1249,174 @@ function erreur(why) {
 /* =====================================================================================
    Données d'exemple — initiales fictives (Q…), cycles 5-4, quelques OT, congés et trous
    ===================================================================================== */
+/* =====================================================================================
+   Plan du jour : qui est assis quand (moteur testé à part, tests/t_plan_jour.js)
+   ===================================================================================== */
+/* PLAN-MOTEUR-DEBUT */
+// Plan of the Day engine: who sits when, for one operational day (first morning arrival → next morning).
+// people: [{ i, s, e, ot }] — s/e = shift start/end in minutes from the day's 00:00 (a night shift that starts after
+// midnight: 1440 + …). Returns { lignes: [[minute, [initials…], note]], … } — a line each time the sitters change.
+const PLAN = Object.assign({
+  pas: 15,                 // time step (min)
+  finAvant: 45,            // stop sitting this long before the end of a regular shift
+  finAvantOT: 30,          // … of an OT shift
+  sieste: 60,              // ideal sit and ideal break: 1 h on, 1 h off
+  minSit: 30,              // never start a sit with less than this left before going home
+  maxPos: 5,
+  minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
+  nuitDe: 1260,            // a shift starting from 21:00 is a night shift
+  coupureNuit: 120,        // with 2 night people: the first sits until 02:00, the second after
+}, CONFIG.plan || {});
+
+function planJour(gens, cfg) {
+  const C = Object.assign({}, PLAN, cfg || {});
+  const P = gens.map(g => {
+    const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
+    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]]).map(([a, b]) => [a, Math.min(b, fin)]).filter(([a, b]) => b > a);
+    return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
+  }).filter(p => p.blocs.length);
+  const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
+  const jour = P.filter(p => !p.nuit).sort(tri), nuit = P.filter(p => p.nuit).sort(tri);
+  if (!jour.length && !nuit.length) return [];
+  const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
+  // the night: one position, shared in turns (2 people: 22:15 → 02:00, then 02:00 → morning)
+  const tranches = [];
+  if (nuit.length === 1) tranches.push([nuit[0], nuit[0].s, matin]);
+  else if (nuit.length >= 2) {
+    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = nuit[1].s;
+    const bornes = [nuit[0].s];
+    if (fin1) bornes.push(fin1);
+    else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
+    bornes.push(matin);
+    nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
+  }
+  const nuitAssis = t => tranches.filter(([, a, b]) => t >= a && t < b).map(([p]) => p);
+  const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
+  // day: step by step (every 15 min); sitters change only for a reason:
+  //  R1 someone must go home → replaced; R2 fewer positions than the minimum → filled;
+  //  R3 on the hour: 1 h on / 1 h off rotation, and the number of positions follows who is there;
+  //  R4 short of staff (more positions than half the people): whoever has rested 45 min (30 if really short)
+  //     replaces whoever has sat the longest, as soon as that one has sat an hour — at any quarter hour;
+  //  R5 the first relief of the morning (06:15 relieves 05:45 after 30 min).
+  const st = new Map(jour.map(p => [p, { on: false, depuis: p.s, neuf: true }]));
+  const finJour = jour.length ? Math.max(...jour.map(p => p.blocs[p.blocs.length - 1][1])) : t0;
+  const lignes = [];
+  let assisMin = 0, dispoMin = 0, Pt = 0;
+  const assisTot = new Map();
+  for (let t = t0; t < Math.max(finJour, nuit.length ? matin : 0); t += C.pas) {
+    const heure = t % 60 === 0;
+    const bloc = p => p.blocs.find(([a, b]) => t >= a && t < b), reste = p => { const b = bloc(p); return b ? b[1] - t : 0; };
+    const dispo = jour.filter(p => bloc(p));
+    const on = () => jour.filter(p => st.get(p).on);
+    const assis = p => t - st.get(p).depuis, repos = p => (st.get(p).neuf ? 1e9 : t - st.get(p).depuis);
+    const debout = () => dispo.filter(p => !st.get(p).on && reste(p) >= C.minSit).sort((a, b) => repos(b) - repos(a) || a.fin - b.fin);
+    const lever = p => st.set(p, { on: false, depuis: t }), asseoir = p => st.set(p, { on: true, depuis: t, neuf: false });
+    const plusLong = () => on().sort((a, b) => assis(b) - assis(a));
+    const n = dispo.length, nn = t < finJour ? nuitAssis(t).length : 0, mini = Math.max(0, minPos(t) - nn);
+    // R1
+    jour.forEach(p => { if (st.get(p).on && !bloc(p)) lever(p); });
+    // positions: half of those here (kept near 50 % over the day), between the minimum and the maximum, and never
+    // everyone at once when 2 or more are here (one must be on a break for the others to rotate)
+    if (heure || on().length > n || t === t0) {
+      let c = dispoMin && assisMin / dispoMin > 0.5 ? Math.floor(n / 2) : Math.ceil(n / 2);
+      c = Math.min(C.maxPos - nn, Math.max(mini, c));
+      if (n >= 2) c = Math.min(c, n - 1);
+      Pt = Math.max(nn ? 0 : Math.min(1, n), Math.min(c, n));
+    }
+    const court = Pt > Math.ceil(n / 2), pause = !court ? C.sieste : n / Pt >= 1.5 ? 45 : 30;
+    // R3 (on the hour) / R4 (short, any quarter hour)
+    if (heure) {
+      // everyone who has sat 45 min or more gets up; the seats are then filled by the most rested
+      // (someone who just got up sits again only if nobody else can)
+      const leves = plusLong().filter(x => assis(x) >= C.sieste - 15);
+      leves.forEach(lever);
+      while (on().length > Pt) lever(plusLong()[0]);
+      const tot = p => assisTot.get(p) || 0;
+      while (on().length < Pt) {
+        const c = debout().find(x => !leves.includes(x) && repos(x) >= Math.min(pause, C.sieste - 15))
+          || leves.filter(x => !st.get(x).on && bloc(x)).sort((a, b) => tot(a) - tot(b))[0];   // keeps sitting
+        if (!c) break; asseoir(c);
+      }
+    } else if (court) {
+      for (const c of debout().filter(x => repos(x) >= pause)) {
+        const p = plusLong()[0]; if (!p || assis(p) < C.sieste) break; lever(p); asseoir(c);
+      }
+    }
+    // R2 (and the hour's new positions); never nobody while someone is here (even with less than 30 min left)
+    while (on().length < Pt && (heure || on().length < mini || !on().length)) { const c = debout()[0]; if (!c) break; asseoir(c); }
+    if (!on().length && !nn && dispo.length) asseoir(dispo.slice().sort((a, b) => reste(b) - reste(a))[0]);
+    // R5
+    if (!heure && on().length === 1 && t - t0 <= 60) {
+      const p = on()[0], c = dispo.find(x => x.s === t && !st.get(x).on);
+      if (c && assis(p) >= 30) { lever(p); asseoir(c); }
+    }
+    jour.forEach(p => { const s = st.get(p); if (s.neuf && !s.on && t >= p.s && t - p.s >= C.sieste) s.neuf = false; });
+    assisMin += on().length * C.pas; dispoMin += n * C.pas;
+    on().forEach(p => assisTot.set(p, (assisTot.get(p) || 0) + C.pas));
+    const qui = [...on(), ...nuitAssis(t)].map(p => p.i);
+    const note = t < finJour && qui.length < minPos(t) ? 'court' : '';
+    const cle = qui.slice().sort().join(' ') + note;
+    if (!lignes.length || lignes[lignes.length - 1][3] !== cle) lignes.push([t, qui, note, cle]);
+  }
+  return lignes.map(([t, qui, note]) => [t, qui, note]);
+}
+/* PLAN-MOTEUR-FIN */
+const hhmmP = m => { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + pad(m % 60); };
+// the people of an operational day: the day shifts of that date, then its nights (22:15, 23:00, and the 00:00 of
+// the next date, shown the evening before). Supervisors, trainees and other activities don't sit.
+function gensPlan(day) {
+  const pris = [], hors = [];
+  for (const q of S.byDay[day] || []) {
+    const pourquoi = (q.f & 2) ? 'superviseur' : estStag(q.who) ? 'stagiaire' : ((q.f & 4) && !q.parts) ? (q.act || 'autre activité') : '';
+    if (pourquoi) { hors.push([q.who, pourquoi]); continue; }
+    const fen = q.parts ? q.parts.filter(x => x.k === 0).map(x => [q.off + x.s0, q.off + x.s1]) : null;
+    if (fen && !fen.length) { hors.push([q.who, q.act || 'autre activité']); continue; }
+    pris.push({ i: q.who, s: q.off, e: q.fin, ot: !!(q.f & 1), fen, a: q.a, b: q.b });
+  }
+  return { pris: pris.sort((x, y) => x.s - y.s || (x.i < y.i ? -1 : 1)), hors };
+}
+S.planJour = null; S.planSans = {};
+function texteDuPlan(day) {
+  const { pris } = gensPlan(day), sans = S.planSans[day] || [];
+  const lignes = planJour(pris.filter(p => !sans.includes(p.i)));
+  return `Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
+    (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
+}
+function ouvrirPlan(el) {
+  const day = S.planJour || S.cur;
+  S.planJour = day;
+  const { pris, hors } = gensPlan(day), sans = S.planSans[day] || [];
+  const nb = pris.length - pris.filter(p => sans.includes(p.i)).length;
+  const html = `<h3>Plan du jour</h3>` +
+    `<div class="plan-nav"><button data-plan="prec" aria-label="Jour précédent">&#8249;</button><b>${esc(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` +
+    `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
+    `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>` +
+    `<div class="plan-act"><button data-plan="copier">Copier</button><span id="planCopie"></span></div>` +
+    `<div class="plan-gens">${pris.map(p => `<label><input type="checkbox" data-plan="qui" value="${esc(p.i)}"${sans.includes(p.i) ? '' : ' checked'}> ${esc(p.i)} ` +
+      `<span class="hr">${p.ot ? '$' : ''}${hm(p.a)}</span></label>`).join('')}</div>` +
+    (hors.length ? `<div class="plan-hors">Pas comptés : ${hors.map(([w, r]) => `${esc(w)} (${esc(r)})`).join(', ')}</div>` : '') +
+    `<div class="plan-aide">${nb} contrôleur${nb > 1 ? 's' : ''} compté${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
+    `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
+    `Le texte se modifie avant de copier.</div>`;
+  const pop = document.getElementById('pop');
+  if (!pop.hidden && pop.classList.contains('plan')) { pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + html; return; }
+  ouvrirPop({ c: 'var(--accent)', html, cls: 'plan' }, el);
+}
+document.getElementById('bPlan').onclick = e => { S.planJour = S.cur; ouvrirPlan(e.currentTarget); };
+document.getElementById('pop').addEventListener('click', e => {
+  const b = e.target.closest('[data-plan]'); if (!b) return;
+  const a = b.dataset.plan, day = S.planJour;
+  if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
+  else if (a === 'qui') {
+    const l = new Set(S.planSans[day] || []); if (b.checked) l.delete(b.value); else l.add(b.value);
+    S.planSans[day] = [...l]; document.getElementById('planTxt').value = texteDuPlan(day);
+  } else if (a === 'copier') {
+    const t = document.getElementById('planTxt'), ok = () => { document.getElementById('planCopie').textContent = 'Copié ✓'; };
+    const vieux = () => { t.select(); try { document.execCommand('copy'); ok(); } catch (x) { document.getElementById('planCopie').textContent = 'Sélectionné : Ctrl+C'; } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(ok, vieux); else vieux();
+  }
+});
+
 function demo() {
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
