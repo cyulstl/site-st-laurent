@@ -1289,28 +1289,46 @@ const PLAN = Object.assign({
   minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
   nuitDe: 1260,            // a shift starting from 21:00 is a night shift
   coupureNuit: 120,        // with 2 night people: the first sits until 02:00, the second after
+  nuitTot: 1680,           // a shift that starts earlier but ends after 04:00 the next morning is a night too (early
+                           // arrival, e.g. 18:30-06:30): evening sits until the night starts, then the night's last turn
+  debutNuit: 1335,         // when the night position starts if nobody starts a night shift (22:15)
+  finAvantFen: 30,         // stop sitting this long before leaving the floor during the shift (leave, training…)
 }, CONFIG.plan || {});
 
 function planJour(gens, cfg) {
   const C = Object.assign({}, PLAN, cfg || {});
-  const P = gens.map(g => {
+  const P0 = gens.map(g => {
     const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
-    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]]).map(([a, b]) => [a, Math.min(b, fin)]).filter(([a, b]) => b > a);
+    // a coverage window that ends before the shift (leave, training after it): off the floor 30 min before
+    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
+      .map(([a, b]) => [a, Math.min(b < g.e ? b - C.finAvantFen : b, fin)]).filter(([a, b]) => b > a);
     return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
   }).filter(p => p.blocs.length);
+  // early nights (18:30-06:30…): an evening part in the day rotation until the night starts, then a night part that
+  // takes the night's last turn (sleep, then 02:00 → morning); the regular night shifts keep the first turns
+  const vraies = P0.filter(p => p.nuit);
+  const debutNuit = vraies.length ? Math.min(...vraies.map(p => p.s)) : C.debutNuit;
+  const P = [];
+  P0.forEach(p => {
+    if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
+    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]] }));
+    P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
+  });
   const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
   // supervisors (sup) sit only if needed: to keep the minimum of positions (or the night, if no controller)
   const sups = P.filter(p => p.sup && !p.nuit).sort(tri);
   const jour = P.filter(p => !p.nuit && !p.sup).sort(tri);
-  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit)).sort(tri);
+  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit))
+    .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
+  const debN = p => p.tot ? p.depart : p.s;          // when a night person can start the night position
   if (!jour.length && !nuit.length) return [];
   const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
   // the night: one position, shared in turns (2 people: 22:15 → 02:00, then 02:00 → morning)
   const tranches = [];
-  if (nuit.length === 1) tranches.push([nuit[0], nuit[0].s, matin]);
+  if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
   else if (nuit.length >= 2) {
-    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = nuit[1].s;
-    const bornes = [nuit[0].s];
+    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = Math.max(debN(nuit[1]), debN(nuit[0]));
+    const bornes = [debN(nuit[0])];
     if (fin1) bornes.push(fin1);
     else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
     bornes.push(matin);
