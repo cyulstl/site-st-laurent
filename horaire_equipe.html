@@ -231,6 +231,9 @@
   .plan-nav button { border: 1px solid var(--line); background: var(--bg); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; }
   .pop textarea.plan-txt { width: 100%; box-sizing: border-box; min-height: 260px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
                            padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .plan-mot { display: flex; gap: 4px; margin: 0 0 8px; }
+  .plan-mot button { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 14px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+  .plan-mot button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .plan-act { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
   .plan-act button { border: 0; background: var(--accent); color: #fff; border-radius: 16px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
   .plan-act span { font-size: 12px; color: var(--ok, #188038); }
@@ -1316,7 +1319,7 @@ function planJour(gens, cfg) {
   const P = [];
   P0.forEach(p => {
     if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
-    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]] }));
+    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]], soir: true }));
     P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
   });
   const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
@@ -1342,7 +1345,7 @@ function planJour(gens, cfg) {
   const nuitAssis = t => tranches.filter(([, a, b]) => t >= a && t < b).map(([p]) => p);
   // closers: day shifts that end at midnight or later; heureFerm = the hour mark just before the night starts (22:00)
   const heureFerm = tranches.length ? Math.floor((tranches[0][1] - 1) / 60) * 60 : null;
-  const closer = p => heureFerm != null && !p.nuit && !p.sup && p.e >= C.finCloser;
+  const closer = p => heureFerm != null && !p.nuit && !p.sup && !p.soir && p.e >= C.finCloser;
   const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
   // day: step by step (every 15 min); sitters change only for a reason:
   //  R1 someone must go home → replaced; R2 fewer positions than the minimum → filled;
@@ -1444,6 +1447,159 @@ function planJour(gens, cfg) {
   return lignes.map(([t, qui, note]) => [t, qui, note]);
 }
 /* PLAN-MOTEUR-FIN */
+/* PLAN-COTES-DEBUT */
+// Plan du jour — version « côtés » (brouillon, testée en parallèle du moteur actuel, moteur.js).
+// Comme les vrais plans : deux côtés qui alternent d'heure en heure, et chacun reste sur son côté.
+//   côté X : ouverture 05:45-06:15, les heures impaires (07, 09, 11), 13:00-13:30, puis les heures paires dès 14:00
+//            (14, 16, 18, 20) et, pour le closer (1515), 22:00-23:00 avec la nuit ;
+//   côté Y : 06:15-07:00, les heures paires (08, 10, 12), 13:30-14:00, puis les heures impaires dès 15:00
+//            (15, 17, 19) et 21:00-22:15.
+// La bascule de 13:00-13:30 / 13:30-14:00 est le « flip » habituel : un 1100 (X) fait 13:00-13:30 puis 14:00-15:00.
+// Chaque arrivée va du côté le moins chargé (ceux qui restent encore au moins 2 h) ; les 05:45 ouvrent sur X, les
+// 06:15 sur Y. Un côté qui tombe sous le minimum emprunte le plus reposé de l'autre côté (un flip, rarement).
+// Quelqu'un qui doit partir en plein tour est remplacé par le plus reposé de l'autre côté (« YH/GA »).
+// La nuit, les nuits qui entrent tôt et le superviseur en réserve : mêmes règles que moteur.js.
+const COTES = Object.assign({}, PLAN, {
+  grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
+    [660, 720, 'X'], [720, 780, 'Y'], [780, 810, 'X'], [810, 840, 'Y'], [840, 900, 'X'], [900, 960, 'Y'],
+    [960, 1020, 'X'], [1020, 1080, 'Y'], [1080, 1140, 'X'], [1140, 1200, 'Y'], [1200, 1260, 'X'], [1260, 1335, 'Y']],
+  closer: [1320, 1380],    // the closer's slot (side X), with the night from 22:15
+  resteCote: 180,          // a side's load = its members who stay at least this long after the arrival
+  reposFlip: 30,           // someone borrowed from the other side has rested at least this long (else: a 2 h sit)
+  // positions wanted by time of day (from the real plans): 2 at the opening, 3 from 07:00, 4 from 12:00,
+  // 3 from 19:00; never more than half of those here (rounded up), never fewer than the minimum
+  voulu: [[0, 1], [345, 2], [420, 3], [720, 4], [1140, 3], [1335, 1]],
+});
+
+function planCotes(gens, cfg) {
+  const C = Object.assign({}, COTES, cfg || {});
+  // ---- the people (same preparation as moteur.js)
+  const P0 = gens.map(g => {
+    const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
+    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
+      .map(([a, b]) => [a, Math.min(b < g.e ? b - C.finAvantFen : b, fin)]).filter(([a, b]) => b > a);
+    return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
+  }).filter(p => p.blocs.length);
+  const vraies = P0.filter(p => p.nuit);
+  const debutNuit = vraies.length ? Math.min(...vraies.map(p => p.s)) : C.debutNuit;
+  const P = [];
+  P0.forEach(p => {
+    if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
+    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]], soir: true }));
+    P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
+  });
+  const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
+  const sups = P.filter(p => p.sup && !p.nuit).sort(tri);
+  const jour = P.filter(p => !p.nuit && !p.sup).sort(tri);
+  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit))
+    .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
+  if (!jour.length && !nuit.length) return [];
+  const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
+  // ---- the night (as moteur.js)
+  const debN = p => p.tot ? p.depart : p.s;
+  const tranches = [];
+  if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
+  else if (nuit.length >= 2) {
+    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = Math.max(debN(nuit[1]), debN(nuit[0]));
+    const bornes = [debN(nuit[0])];
+    if (fin1) bornes.push(fin1);
+    else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
+    bornes.push(matin);
+    nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
+  }
+  const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
+  const dispoDe = (p, a, b) => { const k = p.blocs.find(([x, y]) => x <= a && y > a); return k ? Math.min(b, k[1]) : null; };   // end of what p can do from a
+
+  // ---- sides: the standard shifts have theirs (05:45, 13:30, 15:15 → X ; 06:15, 14:15 → Y), an early night's evening
+  // is on Y (its last slot ends when the night starts), the others go to the lighter side (members still there 3 h
+  // later), and on a tie to the side whose next full hour comes later
+  // (decided when they arrive, with the sides as they are then — after any flip)
+  const cote = new Map(), origine = new Map(), finDe = p => p.blocs[p.blocs.length - 1][1];
+  const fixe = { 345: 'X', 375: 'Y', 810: 'X', 855: 'Y', 915: 'X' };
+  const placer = t => jour.filter(p => !cote.has(p) && p.s <= t).forEach(p => {
+    let c = fixe[p.s] || (P.some(q => q.tot && q.i === p.i && q.s === p.s) ? 'Y' : null);
+    if (!c) {
+      const charge = k => jour.filter(q => cote.get(q) === k && finDe(q) >= p.s + C.resteCote).length;
+      const prochain = k => { const g = C.grille.find(([a, b, s]) => s === k && a >= p.s && b - a >= 60); return g ? g[0] : 1e9; };
+      const cx = charge('X'), cy = charge('Y');
+      c = cx < cy ? 'X' : cy < cx ? 'Y' : prochain('X') > prochain('Y') ? 'X' : 'Y';
+    }
+    cote.set(p, c); origine.set(p, c);
+  });
+  const closerDe = p => !p.soir && p.e >= C.finCloser;
+
+  // ---- the sits, slot by slot
+  const sits = [];                                    // [p, from, to]
+  const dernier = new Map();                          // p → end of its last sit
+  const repos = (p, t) => t - (dernier.has(p) ? dernier.get(p) : -1e9);
+  const finOuverture = jour.filter(p => p.s >= 375 && p.s < 420).length;   // the 06:15s relieve one for one
+  placer(t0);
+  for (const [a, b, k] of C.grille) {
+    if (b <= t0) continue;
+    const t = Math.max(a, t0);
+    placer(t);
+    let qui = jour.filter(p => cote.get(p) === k && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit);
+    // the closer keeps fresh for 22:00 (not in the 21:00-22:15 slot when someone else can sit)
+    if (a === 1260) qui = qui.filter(p => !closerDe(p) || qui.length === 1);
+    // opening: as many as the 06:15s who will relieve them
+    if (a === 345 && finOuverture) qui = qui.slice(0, Math.max(finOuverture, minPos(t)));
+    // too many: the most rested sit (maxPos)
+    // (most rested first — but a half hour, 13:00 or 13:30, goes first to those already here, not to a newcomer —
+    // then those on their own side, then those who stay later: the ones leaving sooner keep the reliefs)
+    const neuf = p => b - a < 60 && !dernier.has(p) ? 1 : 0;
+    qui.sort((x, y) => neuf(x) - neuf(y) || repos(y, t) - repos(x, t) || (origine.get(x) === k ? 0 : 1) - (origine.get(y) === k ? 0 : 1) ||
+      finDe(y) - finDe(x) || tri(x, y));
+    const nn = tranches.filter(([, x, y]) => t >= x && t < y).length;
+    qui = qui.slice(0, Math.max(0, C.maxPos - nn));
+    // positions wanted: the profile, at most half of those here (rounded up), at least the minimum
+    // (the pool: those who can sit in this slot or the next one; the wanted number is reached when there are at
+    // least 2 more people than positions, otherwise half the pool)
+    const suivant = C.grille.find(([x]) => x >= b), b2 = suivant ? suivant[1] : b;
+    const pool = jour.filter(p => p.s <= (suivant ? suivant[0] : b) && p.blocs.some(([x, y]) => x < b2 && y - Math.max(x, t) >= C.minSit)).length;
+    let voulu = 1; for (const [de, x] of C.voulu) if ((t % 1440) >= de) voulu = x;
+    const cible = Math.max(minPos(t) - nn, (pool >= voulu + 2 ? voulu : Math.min(voulu, Math.floor(pool / 2))) - nn);
+    qui.slice(Math.max(cible, 0)).forEach(p => { if (origine.get(p) !== k) cote.set(p, origine.get(p)); });
+    qui = qui.slice(0, Math.max(cible, 0));
+    // too few: borrow from the other side — the most rested (a 30 min break or more), else someone who has sat only
+    // this last hour (a 2 h sit) — and they switch sides (a flip); then a supervisor for the minimum
+    const autres = () => jour.filter(p => cote.get(p) !== k && !qui.includes(p) && dispoDe(p, t, b) != null &&
+      dispoDe(p, t, b) - t >= C.minSit).sort((x, y) => repos(y, t) - repos(x, t));
+    while (qui.length < cible) {
+      const x = autres().find(p => repos(p, t) >= C.reposFlip) || autres().find(p => !sits.some(([q, , f]) => q === p && f === t && sits.some(([r, , g]) => r === p && g < t && g >= t - 60)));
+      if (!x) break; qui.push(x); cote.set(x, k);
+    }
+    while (qui.length + nn < minPos(t)) { const x = sups.find(s => !qui.includes(s) && dispoDe(s, t, b) != null); if (!x) break; qui.push(x); }
+    // each one sits until the end of the slot or until they must leave; a seat left early goes to the most rested
+    // of the other side (« YH/GA »)
+    for (const p of qui) {
+      const f = dispoDe(p, t, b);
+      sits.push([p, t, f]); dernier.set(p, f);
+      if (f < b && b - f >= C.minSit) {
+        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip)
+          .sort((x, y) => (cote.get(x) === k ? 1 : 0) - (cote.get(y) === k ? 1 : 0) || repos(y, f) - repos(x, f))[0];
+        if (r) { sits.push([r, f, b]); dernier.set(r, b); }
+      }
+    }
+  }
+  // the closer: 22:00 → until they leave, with the night from 22:15 (the most rested one)
+  const cl = jour.filter(p => closerDe(p) && dispoDe(p, C.closer[0], C.closer[1]) != null)
+    .sort((x, y) => repos(y, C.closer[0]) - repos(x, C.closer[0]))[0];
+  if (cl && tranches.length) sits.push([cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1])]);
+
+  // ---- the lines: a line each time the sitters change
+  const lignes = [];
+  const fin = Math.max(matin, ...sits.map(x => x[2]));
+  for (let t = t0; t < fin; t += C.pas) {
+    const jourQui = sits.filter(([, x, y]) => t >= x && t < y).map(([p]) => p);
+    const tous = [...jourQui, ...tranches.filter(([, x, y]) => t >= x && t < y).map(([p]) => p)];
+    const qui = tous.filter((p, i) => tous.indexOf(p) === i).map(p => p.i + (p.sup ? ' (S)' : ''));
+    const note = t < debutNuit && qui.length < minPos(t) ? 'court' : '';
+    const cle = qui.slice().sort().join(' ') + note;
+    if (!lignes.length || lignes[lignes.length - 1][3] !== cle) lignes.push([t, qui, note, cle]);
+  }
+  return lignes.map(([t, qui, note]) => [t, qui, note]);
+}
+/* PLAN-COTES-FIN */
 const hhmmP = m => { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + pad(m % 60); };
 // the people of an operational day: the day shifts of that date, then its nights (22:15, 23:00, and the 00:00 of
 // the next date, shown the evening before). Supervisors, trainees and other activities don't sit.
@@ -1459,9 +1615,10 @@ function gensPlan(day) {
   return { pris: pris.sort((x, y) => x.s - y.s || (x.i < y.i ? -1 : 1)), hors };
 }
 S.planJour = null; S.planSans = {};
+S.planMoteur = (() => { try { return localStorage.getItem('planMoteur') === 'cotes' ? 'cotes' : 'actuel'; } catch (x) { return 'actuel'; } })();
 function texteDuPlan(day) {
   const { pris } = gensPlan(day), sans = S.planSans[day] || [];
-  const lignes = planJour(pris.filter(p => !sans.includes(p.i)));
+  const lignes = (S.planMoteur === 'cotes' ? planCotes : planJour)(pris.filter(p => !sans.includes(p.i)));
   return `Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
     (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
 }
@@ -1474,6 +1631,8 @@ function ouvrirPlan(el) {
     `<div class="plan-beta">En test : un brouillon calculé à partir de l'horaire ESS, pas le plan officiel. Le superviseur décide.</div>` +
     `<div class="plan-nav"><button data-plan="prec" aria-label="Jour précédent">&#8249;</button><b>${esc(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` +
     `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
+    `<div class="plan-mot">${[['actuel', 'Actuel'], ['cotes', 'Côtés (essai)']].map(([v, n]) =>
+      `<button data-plan="mot" data-v="${v}"${S.planMoteur === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
     `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>` +
     `<div class="plan-act"><button data-plan="copier">Copier</button><span id="planCopie"></span></div>` +
     `<div class="plan-gens">${pris.map(p => `<label><input type="checkbox" data-plan="qui" value="${esc(p.i)}"${sans.includes(p.i) ? '' : ' checked'}> ${esc(p.i)} ` +
@@ -1481,7 +1640,9 @@ function ouvrirPlan(el) {
     (hors.length ? `<div class="plan-hors">Pas comptés : ${hors.map(([w, r]) => `${esc(w)} (${esc(r)})`).join(', ')}</div>` : '') +
     `<div class="plan-aide">${nb} personne${nb > 1 ? 's' : ''} comptée${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Superviseurs (S) : assis seulement s'il le faut pour garder le minimum de positions. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
     `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
-    `Le texte se modifie avant de copier.</div>`;
+    `Le texte se modifie avant de copier.` +
+    (S.planMoteur === 'cotes' ? ` <b>Côtés (essai)</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
+      `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position.` : '') + `</div>`;
   const pop = document.getElementById('pop');
   if (!pop.hidden && pop.classList.contains('plan')) { pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + html; return; }
   ouvrirPop({ c: 'var(--accent)', html, cls: 'plan' }, el);
@@ -1491,6 +1652,7 @@ document.getElementById('pop').addEventListener('click', e => {
   const b = e.target.closest('[data-plan]'); if (!b) return;
   const a = b.dataset.plan, day = S.planJour;
   if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
+  else if (a === 'mot') { S.planMoteur = b.dataset.v; try { localStorage.setItem('planMoteur', S.planMoteur); } catch (x) { /* not kept */ } ouvrirPlan(); }
   else if (a === 'qui') {
     const l = new Set(S.planSans[day] || []); if (b.checked) l.delete(b.value); else l.add(b.value);
     S.planSans[day] = [...l]; document.getElementById('planTxt').value = texteDuPlan(day);
