@@ -1288,6 +1288,8 @@ const PLAN = Object.assign({
   minSitHeure: 45,         // on the hour, someone with less than this left sits only if nobody else can (the 13:30s
                            // finish at 21:00, they don't start a half hour at 21:00)
   resteNuit: 60,           // when the night starts (22:15), the evening sitters who leave within this get up
+  finCloser: 1440,         // the closer (1515, ends at midnight or later) sits the last part alongside the night:
+                           // from the hour before the night starts (22:00) until about 23:00; kept off the hour before
   maxPos: 5,
   minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
   nuitDe: 1260,            // a shift starting from 21:00 is a night shift
@@ -1338,6 +1340,9 @@ function planJour(gens, cfg) {
     nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
   }
   const nuitAssis = t => tranches.filter(([, a, b]) => t >= a && t < b).map(([p]) => p);
+  // closers: day shifts that end at midnight or later; heureFerm = the hour mark just before the night starts (22:00)
+  const heureFerm = tranches.length ? Math.floor((tranches[0][1] - 1) / 60) * 60 : null;
+  const closer = p => heureFerm != null && !p.nuit && !p.sup && p.e >= C.finCloser;
   const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
   // day: step by step (every 15 min); sitters change only for a reason:
   //  R1 someone must go home → replaced; R2 fewer positions than the minimum → filled;
@@ -1362,7 +1367,7 @@ function planJour(gens, cfg) {
     const dispo = besoinSup ? [...ctrl, ...sups.filter(p => bloc(p))] : ctrl;
     const on = () => [...jour, ...sups].filter(p => st.get(p).on);
     const assis = p => t - st.get(p).depuis, repos = p => (st.get(p).neuf ? 1e9 : t - st.get(p).depuis);
-    const court45 = p => heure && reste(p) < C.minSitHeure ? 1 : 0;
+    const court45 = p => heure && (reste(p) < C.minSitHeure || (closer(p) && t === heureFerm - 60)) ? 1 : 0;
     const debout = () => dispo.filter(p => !st.get(p).on && reste(p) >= C.minSit).sort((a, b) => (a.sup ? 1 : 0) - (b.sup ? 1 : 0) || court45(a) - court45(b) || repos(b) - repos(a) || a.fin - b.fin);
     // serie = start of the current unbroken sit (getting up and sitting again in the same minute doesn't break it)
     const lever = p => st.set(p, { on: false, depuis: t, serie: st.get(p).serie, leveA: t });
@@ -1389,8 +1394,15 @@ function planJour(gens, cfg) {
     if (heure) {
       // everyone who has sat 45 min or more gets up; the seats are then filled by the most rested
       // (someone who just got up sits again only if nobody else can)
-      const leves = plusLong().filter(x => assis(x) >= C.sieste - 15 || reste(x) < C.minSit);
+      // (at 22:00, someone with 15 min or less left who has sat an hour or less finishes the sit until the night takes
+      // over: the 1415 sits 21:00-22:15)
+      const leves = plusLong().filter(x => (assis(x) >= C.sieste - 15 || reste(x) < C.minSit) &&
+        !(t === heureFerm && reste(x) <= C.pas && assis(x) <= C.sieste));
       leves.forEach(lever);
+      // the closer takes a seat for the last stretch (22:00 → about 23:00, with the night from 22:15)
+      // (one closer: the most rested, as an extra seat; none if one is already on)
+      if (t === heureFerm && !on().some(closer)) dispo.filter(x => closer(x) && !st.get(x).on && reste(x) >= C.minSit)
+        .sort((a, b) => repos(b) - repos(a)).slice(0, 1).forEach(x => { asseoir(x); Pt = Math.max(Pt, on().length); });
       while (on().length > Pt) lever(plusLong()[0]);
       const tot = p => assisTot.get(p) || 0;
       while (on().length < Pt) {
