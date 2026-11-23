@@ -1291,7 +1291,7 @@ const PLAN = Object.assign({
   minSitHeure: 45,         // on the hour, someone with less than this left sits only if nobody else can (the 13:30s
                            // finish at 21:00, they don't start a half hour at 21:00)
   resteNuit: 60,           // when the night starts (22:15), the evening sitters who leave within this get up
-  finCloser: 1440,         // the closer (1515, ends at midnight or later) sits the last part alongside the night:
+  finCloser: 1410,         // the closer (the 1515, or anyone staying until 23:30 or later) sits the last part with the night:
                            // from the hour before the night starts (22:00) until about 23:00; kept off the hour before
   maxPos: 5,
   minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
@@ -1552,12 +1552,12 @@ function planCotes(gens, cfg) {
     const nn = tranches.filter(([, x, y]) => t >= x && t < y).length;
     qui = qui.slice(0, Math.max(0, C.maxPos - nn));
     // positions wanted: the profile, at most half of those here (rounded up), at least the minimum
-    // (the pool: those who can sit in this slot or the next one; the wanted number is reached when there are at
-    // least 2 more people than positions, otherwise half the pool)
+    // (the pool: those who can sit in this slot or the next one; the wanted number is reached when there are 2
+    // people per position, otherwise half the pool — a supervisor who helps is his own choice)
     const suivant = C.grille.find(([x]) => x >= b), b2 = suivant ? suivant[1] : b;
     const pool = jour.filter(p => p.s <= (suivant ? suivant[0] : b) && p.blocs.some(([x, y]) => x < b2 && y - Math.max(x, t) >= C.minSit)).length;
     let voulu = 1; for (const [de, x] of C.voulu) if ((t % 1440) >= de) voulu = x;
-    const cible = Math.max(minPos(t) - nn, (pool >= voulu + 2 ? voulu : Math.min(voulu, Math.floor(pool / 2))) - nn);
+    const cible = Math.max(minPos(t) - nn, (pool >= 2 * voulu ? voulu : Math.min(voulu, Math.floor(pool / 2))) - nn);
     qui.slice(Math.max(cible, 0)).forEach(p => { if (origine.get(p) !== k) cote.set(p, origine.get(p)); });
     qui = qui.slice(0, Math.max(cible, 0));
     // too few: borrow from the other side — the most rested (a 30 min break or more), else someone who has sat only
