@@ -1,0 +1,1883 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan du jour — St-Laurent</title>
+<!--
+  Horaire de l'équipe — St-Laurent
+  À coller dans un élément « Embed HTML » (Intégrer du code) de la page Wix.
+
+  Les données viennent de l'application Web de l'Admin. Worksheet (?type=equipe), mise à jour toutes
+  les heures à partir des calendriers ICS de chacun. Cette page ne voit jamais les liens ICS.
+
+  Pour modifier :
+    - CONFIG (juste en dessous du <style>) : lien des données, couleurs, vue de départ…
+    - les vues sont dans les fonctions vueMois(), vueSemaine() et vueJour() ;
+    - tout le reste (navigation, filtre, chargement) est au bas du fichier.
+  Sans lien dans CONFIG.url, la page montre des données d'exemple (initiales fictives).
+-->
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #3c4043;
+    --muted: #70757a;
+    --line: #dadce0;
+    --soft: #f1f3f4;
+    --weekend: #f8f9fa;
+    --off: #d9d9d9;          /* days off in the 5-4 cycle: the same grey as the Autobid sheet */
+    --offline: #b3b7bd;      /* day borders on that grey */
+    --ferie: #c5221f;        /* paid holidays */
+    --relache: #b9a3e3;      /* March break (relâche scolaire), a soft marker only */
+    --accent: #1a73e8;
+    --now: #d93025;
+    --libre: #0b8043;
+    --partiel: #e8710a;
+    --radius: 6px;
+    font-family: Roboto, "Segoe UI", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; }
+  /* iPhone (Safari) enlarges text in a page laid out wider than the screen (the shrunk « miniature » view):
+     keep the text at its real size so it shrinks with the rest */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { font-size: 13px; }
+  button, select { font: inherit; color: inherit; }
+
+  #app { display: flex; flex-direction: column; height: 100%; width: 100%; }
+
+  /* ---------- barre du haut */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px 6px; }
+  .bar .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+  .bar .grow { flex: 1 1 auto; }
+  .btn { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 5px 14px;
+         cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--soft); }
+  .ico { border: 0; background: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+         font-size: 20px; line-height: 1; color: var(--muted); }
+  .ico:hover { background: var(--soft); }
+  h1 { font-size: 20px; font-weight: 400; margin: 0 4px; white-space: nowrap; }
+  select { border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 8px; background: var(--bg); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .seg button { border: 0; background: var(--bg); padding: 5px 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: #e8f0fe; color: #174ea6; font-weight: 500; }
+  .tog { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer; }
+  #status { padding: 0 14px 6px; color: var(--muted); font-size: 12px; }
+  #status .demo { color: #a50e0e; font-weight: 500; }
+  #status .ligne2 { display: block; margin-top: 1px; }
+  #status .rafr { border: 0; background: none; padding: 0; font: inherit; color: var(--accent, #1a73e8); text-decoration: underline; cursor: pointer; }
+
+  main { flex: 1 1 auto; overflow: auto; border-top: 1px solid var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 12px; border-top: 1px solid var(--line);
+            color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+  .ot { font-style: italic; }
+  .autre { text-decoration: underline dotted; }
+  [data-p]:hover { text-decoration: underline; }
+  .moi { background: #fde293; border-radius: 3px; padding: 0 2px; }
+
+  /* ---------- vue Mois */
+  .month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .month .dow { text-align: center; font-size: 11px; font-weight: 500; color: var(--muted); padding: 6px 0 4px;
+                text-transform: uppercase; border-bottom: 1px solid var(--line); background: var(--bg);
+                position: sticky; top: 0; z-index: 2; }
+  .cell { min-height: 96px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+          padding: 2px 4px 6px; overflow: hidden; }
+  .cell:nth-child(7n) { border-right: 0; }
+  .cell.we { background: var(--weekend); }
+  .cell.out .num { color: #9aa0a6; }
+  .cell.np { background-image: repeating-linear-gradient(135deg, transparent 0 6px, #f1f3f4 6px 8px); }
+  .cell.off { background-color: var(--off); }   /* day off in the person's 5-4 cycle (one person chosen) */
+  .cell.off, .week td.off { border-right-color: var(--offline); border-bottom-color: var(--offline);
+                            box-shadow: inset 1px 1px 0 var(--offline); }   /* keep the day borders visible on grey */
+  .cell.vide { background: var(--bg); }
+  .mtitre { font-size: 15px; font-weight: 500; padding: 16px 10px 8px; border-top: 2px solid var(--line);
+            text-transform: capitalize; }
+  .num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px;
+         margin: 2px 0 2px; border-radius: 12px; font-size: 12px; font-weight: 500; cursor: pointer; padding: 0 4px; }
+  .num:hover { background: var(--soft); }
+  .today .num { background: var(--accent); color: #fff; }
+  /* the weekday next to the date, a shade lighter (zoomed in on a phone, the column headers are out of sight) */
+  .jsem { font-size: 11px; color: #80868b; margin-left: 2px; white-space: nowrap; }
+  .cell.out .jsem { color: #bdc1c6; }
+  /* paid holidays (1.5x): red date + name (list = Setup D:E of the Admin. Worksheet) */
+  .cell:not(.today) .num.fer, .cell.out .num.fer { color: var(--ferie); font-weight: 600; }
+  .fnom { font-size: 11px; color: var(--ferie); font-weight: 500; margin-left: 4px; white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 34px); display: inline-block; vertical-align: middle; }
+  body.etroit .fnom { display: none; }
+  .week thead th.fer, .week thead th.fer .d { color: var(--ferie); }
+  /* March break: soft mauve strip at the top of the day (list = Setup O:Q of the Admin. Worksheet) */
+  .cell { position: relative; }
+  .cell.rel::before, .week thead th.rel::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+                                               background: var(--relache); pointer-events: none; }
+  .week thead th .fn { display: block; font-size: 10.5px; font-weight: 500; color: var(--ferie); white-space: nowrap;
+                       overflow: hidden; text-overflow: ellipsis; }
+  .ln { display: flex; gap: 4px; align-items: baseline; line-height: 16px; font-size: 12px; }
+  .ln .dot { transform: translateY(-1px); }
+  .ln b { font-weight: 500; min-width: 30px; }
+  .ln .ppl { min-width: 0; overflow-wrap: anywhere; }
+  .ev { display: block; margin: 1px 0; padding: 0 5px; border-radius: 3px; font-size: 12px; line-height: 17px;
+        background: var(--deg, var(--t)); border-left: 3px solid var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev b { font-weight: 500; }
+  .ev .act { color: var(--muted); }
+  .ev .hr { font-size: 11px; color: var(--fg); opacity: .85; }
+  .ln.libre { color: var(--libre); font-weight: 500; }
+  .ln .hr { font-weight: 400; font-size: 11px; opacity: .85; white-space: nowrap; }
+  .ln.libre.p { color: var(--partiel); }
+  .more { font-size: 12px; color: var(--muted); cursor: pointer; padding-left: 12px; }
+  .more:hover { color: var(--fg); text-decoration: underline; }
+  .chip { display: block; border-radius: 4px; padding: 1px 6px; margin: 1px 0; font-size: 12px; line-height: 16px;
+          background: var(--deg, var(--t)); border-left: 3px solid var(--c); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; }
+  .chip.conge { background: var(--soft); border-left-color: #9aa0a6; color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 2px; }
+  .pill { font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 7px; background: var(--deg, var(--t)); color: var(--fg); }
+  .pill.t { line-height: 12px; padding: 1px 3px; border-radius: 4px; text-align: center; border-left: 2px solid var(--c); }
+
+  /* ---------- vue Semaine (grille d'équipe) */
+  table.week { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 820px; }
+  .week th, .week td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+                       padding: 3px 4px; text-align: center; font-size: 12px; height: 26px; }
+  .week thead th { position: sticky; top: 0; background: var(--bg); z-index: 2; font-weight: 500; color: var(--muted); }
+  .week thead th.today { color: var(--accent); }
+  .week thead th .d { display: block; font-size: 16px; color: var(--fg); font-weight: 400; }
+  .week thead th.today .d { color: var(--accent); font-weight: 500; }
+  .week th.who { position: sticky; left: 0; background: var(--bg); z-index: 1; text-align: left; padding-left: 10px;
+                 font-weight: 500; width: 56px; }
+  .week thead th.who { z-index: 3; }
+  .week td.we { background: var(--weekend); }
+  .week td.np { background-image: repeating-linear-gradient(135deg, transparent 0 6px, #f1f3f4 6px 8px); }
+  .week td .sh { display: inline-block; padding: 1px 4px; border-radius: 4px; background: var(--deg, var(--t));
+                 border-left: 3px solid var(--c); font-size: 11px; white-space: nowrap; }
+  .week td .cg { color: var(--muted); font-size: 11px; }
+  .week tr.sel th, .week tr.sel td { background: #fef7e0; }
+  .week td.off, .week tr.sel td.off { background-color: var(--off); }
+  .week tfoot th, .week tfoot td { color: var(--muted); font-size: 11px; background: var(--soft); }
+  .week tfoot th.who { background: var(--soft); }
+  .week tbody tr:hover th.who { color: var(--accent); }
+
+  /* ---------- vue Jour (ligne du temps) */
+  .day { position: relative; padding: 0 12px 12px 0; min-width: 520px; }
+  .day .row { display: flex; align-items: center; height: 26px; }
+  .day .lab { width: 60px; flex: none; padding-left: 12px; font-weight: 500; font-size: 12px; align-self: stretch;
+              display: flex; align-items: center; position: sticky; left: 0; background: var(--bg); z-index: 3; }
+  .day .trk { position: relative; flex: 1 1 auto; height: 100%; }
+  .day .hours { position: sticky; top: 0; background: var(--bg); z-index: 2; height: 24px; border-bottom: 1px solid var(--line); }
+  .day .hours span { position: absolute; top: 5px; transform: translateX(-50%); font-size: 11px; color: var(--muted); }
+  .day .grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eceff1; }
+  .day .grid.mid { border-left: 1px solid #c4c7c5; }
+  .day .b { position: absolute; z-index: 1; top: 3px; bottom: 3px; border-radius: 4px; background: var(--deg, var(--t)); border-left: 3px solid var(--c);
+            font-size: 11px; line-height: 20px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .day .b.libre { background: #e6f4ea; border: 1px dashed var(--libre); color: var(--libre); font-weight: 500; }
+  .day .b.libre.p { background: #feefe3; border-color: var(--partiel); color: var(--partiel); }
+  .day .nowline { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--now); z-index: 2; pointer-events: none; opacity: .55; }
+  .day .sep { height: 1px; background: var(--line); margin: 4px 0; }
+  .day .info { padding: 8px 12px; color: var(--muted); }
+  .day .sum { padding: 8px 12px 0; color: var(--muted); font-size: 12px; }
+
+  .msg { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+  /* ---------- congé dans la vue Mois */
+  .ev.cg { background: var(--soft); border-left-color: #c4c7c5; color: var(--muted); }
+  .ev.cg i { font-size: 11px; }
+  /* fin d'une nuit commencée la veille (« → 07:15 ») : pâlie, bordure pointillée */
+  .ev.suite, .chip.suite, .week td .sh.suite { background: var(--t); border-left-style: dashed; opacity: .72; font-style: italic; }
+  .week td .sh.suite { font-size: 10px; padding: 1px 3px; }
+  .day .b.suite { opacity: .6; border-left-style: dashed; font-style: italic; }
+  [data-q], [data-cg], [data-p] { cursor: pointer; }
+
+  /* ---------- fenêtre de détails (clic sur un quart) */
+  #popbg { position: fixed; inset: 0; z-index: 50; }
+  #popbg.sheet { background: rgba(32, 33, 36, .35); }
+  .pop { position: fixed; z-index: 51; width: 270px; background: var(--bg); border-radius: 8px;
+         border-top: 4px solid var(--c, #9aa0a6); box-shadow: 0 6px 24px rgba(0, 0, 0, .22);
+         padding: 12px 14px 14px; font-size: 13px; }
+  .pop.sheet { left: 0 !important; right: 0; width: auto;
+               border-radius: 14px 14px 0 0; padding: 16px 18px calc(18px + env(safe-area-inset-bottom)); font-size: 15px; }
+  .pop.sheet:not(.flottant) { top: auto !important; bottom: 0; }
+  /* on the site (Wix), the page is one tall frame: the bottom of the frame can be far below what the phone shows,
+     so the details open right next to the shift that was touched */
+  .pop.sheet.flottant { left: 8px !important; right: 8px; border-radius: 14px; overflow: auto; padding-bottom: 18px; }
+  .pop .x { position: absolute; top: 4px; right: 4px; border: 0; background: none; font-size: 22px; line-height: 1;
+            color: var(--muted); cursor: pointer; padding: 6px 10px; }
+  .pop h3 { margin: 0 28px 2px 0; font-size: 17px; font-weight: 500; }
+  .pop .dt { color: var(--muted); margin-bottom: 8px; }
+  .pop .tm { font-size: 20px; font-weight: 500; }
+  .pop .tm small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .pop .tags { margin-top: 6px; }
+  .pop .tags span { display: inline-block; margin: 3px 4px 0 0; padding: 1px 9px; border-radius: 10px;
+                    background: var(--soft); font-size: 12px; }
+  .pop .act { margin-top: 8px; }
+  .pop ul { list-style: none; margin: 4px 0 0; padding: 0; }
+  .pop li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  .pop li .j { width: 62px; flex: none; color: var(--muted); }
+  .pop li .dot { margin-right: 6px; }
+  .pop ul.parts { margin-top: 10px; }
+  .pop ul.parts li { gap: 8px; }
+  .pop ul.parts .j { width: auto; flex: none; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .pop .sq { width: 12px; height: 12px; border-radius: 3px; border-left: 3px solid; flex: none; }
+  .pop .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .pop.large { width: 340px; }
+  .beta { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; background: #f57c00; color: #fff;
+          font-size: 10px; font-weight: 600; line-height: 16px; letter-spacing: .3px; text-transform: uppercase; vertical-align: 1px; }
+  .plan-beta { margin: 0 0 8px; padding: 6px 9px; border-radius: 6px; background: #fff3e0; color: #8a4b00; font-size: 12px; line-height: 1.4; }
+  .pop.plan { width: 380px; max-height: calc(100vh - 16px); overflow: auto; }
+  .pop.plan.sheet { width: auto; max-height: 85vh; }
+  .plan-nav { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; color: var(--muted); }
+  .plan-nav b { color: var(--fg); font-weight: 500; flex: 1; text-align: center; }
+  .plan-nav button { border: 1px solid var(--line); background: var(--bg); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; }
+  .pop textarea.plan-txt { width: 100%; box-sizing: border-box; min-height: 260px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+                           padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .plan-mot { display: flex; gap: 4px; margin: 0 0 8px; }
+  .plan-mot button { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 14px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+  .plan-mot button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  body.mode-plan .bar, body.mode-plan #legend { display: none; }
+  body.mode-plan #view { max-width: 680px; margin: 0 auto; padding: 4px 12px 24px; box-sizing: border-box; }
+  body.mode-plan #status { max-width: 680px; margin: 0 auto; padding: 6px 12px 0; box-sizing: border-box; }
+  .plan-page h3 { margin: 4px 0 8px; font-size: 18px; font-weight: 500; }
+  .plan-vues { display: flex; gap: 2px; margin: 0 0 8px; border-bottom: 1px solid var(--line); }
+  .plan-vues button { border: 0; background: none; color: var(--muted); padding: 6px 10px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .plan-vues button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .plan-pos { display: grid; gap: 3px; font-size: 13px; }
+  .plan-pos .h { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); align-self: center; }
+  .plan-pos .h.court { color: var(--partiel); }
+  .plan-pos .q { display: flex; align-items: center; justify-content: center; min-height: 22px; border-radius: 5px; background: #e8f0fe;
+                 color: #174ea6; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
+  .plan-pos .q.opt { background: none; border: 1px dashed #8ab4f8; color: var(--muted); font-weight: 400; }
+  .plan-pos .q.moi, .plan-pers .b.moi { background: var(--accent); color: #fff; }
+  .plan-pos .q.opt.moi { border-color: var(--accent); background: #e8f0fe; color: #174ea6; }
+  .plan-pers { overflow-x: auto; font-size: 11px; padding-bottom: 4px; }
+  .plan-pers .ligne { position: relative; height: 22px; }
+  .plan-pers .ech { position: relative; height: 16px; color: var(--muted); }
+  .plan-pers .ech span { position: absolute; top: 0; transform: translateX(-50%); }
+  .plan-pers .nom { position: sticky; left: 0; z-index: 1; display: inline-block; width: 30px; height: 22px; line-height: 22px; background: var(--bg);
+                    font-size: 12px; font-weight: 500; cursor: pointer; }
+  .plan-pers .b { position: absolute; top: 3px; height: 16px; line-height: 16px; border-radius: 4px; background: #c6dafc; color: #174ea6;
+                  text-align: center; overflow: hidden; white-space: nowrap; font-weight: 500; cursor: pointer; }
+  .plan-pers .b.opt { background: none; border: 1px dashed #8ab4f8; box-sizing: border-box; line-height: 14px; color: var(--muted); }
+  .plan-pers .grille { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--soft); }
+  .plan-act { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+  .plan-act button { border: 0; background: var(--accent); color: #fff; border-radius: 16px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .plan-act span { font-size: 12px; color: var(--ok, #188038); }
+  .plan-gens { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+  .plan-gens label { white-space: nowrap; cursor: pointer; }
+  .plan-gens .hr { color: var(--muted); font-size: 11px; }
+  .plan-hors, .plan-aide { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .pop .choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px;
+                max-height: 46vh; overflow-y: auto; margin-top: 4px; }
+  .pop .choix label { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px;
+                      background: var(--soft); cursor: pointer; font-weight: 500; user-select: none; }
+  .pop .choix label:has(input:checked) { background: #d3e2fc; color: #0b3a8c; }
+  .pop .choix input { margin: 0; }
+  .pop .btns button { border: 1px solid var(--line); background: var(--bg); border-radius: 18px; padding: 5px 12px;
+                      cursor: pointer; font-size: 13px; color: var(--accent); }
+  .pop .btns button:hover { background: #f6f9fe; }
+  .pop.sheet .btns button { flex: 1 1 auto; padding: 11px 14px; font-size: 15px; }
+
+  /* compact phone layout (CONFIG.telephone = 'compact'); the class is set by ajusterTaille() */
+  body.etroit .bar { padding: 8px 8px 4px; }
+  body.etroit h1 { font-size: 16px; flex: 1 1 auto; }
+  body.etroit .cell { min-height: 64px; padding: 1px 2px 4px; }
+  body.etroit .num { min-width: 22px; height: 22px; }
+  body.etroit .day .lab { width: 44px; padding-left: 6px; }
+  body.etroit .seg button { padding: 5px 9px; }
+  body.etroit #status .tip { display: none; }
+  /* phones: everything the calendar doesn't need folds away so the days get the room */
+  body.etroit .bar { font-size: 13px; gap: 6px 8px; }
+  body.etroit .bar .grp:last-child { gap: 6px 8px; }
+  body.etroit #who { order: 1; padding: 4px 11px; }
+  body.etroit .seg { order: 2; }
+  body.etroit .seg button { padding: 4px 9px; }
+  body.etroit .tog { order: 3; }
+  body.etroit #bLeg { order: 4; padding: 3px 10px; font-size: 12px; }
+  body.etroit #bPlein { order: 5; padding: 3px 9px; font-size: 12px; }
+  body.etroit .lg-plein, body.etroit .lg-who, body.etroit .lg-sem { display: none; }
+  .ct-who, .ct-sem { display: none; }
+  body.etroit .ct-who, body.etroit .ct-sem { display: inline; }
+  body.etroit #bToday { font-size: 13px; padding: 4px 10px; }
+  body.etroit h1 { font-size: 15px; margin: 0 2px; }
+  body.etroit .bar .grp:first-child { gap: 2px; flex-wrap: nowrap; }
+  body.etroit #bToday { padding: 4px 11px; }
+  body.etroit .ico { width: 28px; height: 28px; }
+  body.etroit #status { padding: 0 10px 5px; font-size: 11.5px; line-height: 1.35; }
+  body.etroit #status .lg, body.etroit #status .det { display: none; }
+  #status .ct { display: none; }
+  body.etroit #status .ct { display: inline; }
+  body.etroit .legend { display: none; }
+  .pop .legend { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; border: 0; padding: 4px 0 0;
+                 font-size: 13px; color: var(--fg); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <div class="grp">
+      <button class="btn" id="bToday">Aujourd'hui</button>
+      <button class="ico" id="bPrev" aria-label="Précédent">&#8249;</button>
+      <button class="ico" id="bNext" aria-label="Suivant">&#8250;</button>
+      <h1 id="range"></h1>
+    </div>
+    <div class="grow"></div>
+    <div class="grp">
+      <button class="btn" id="who" aria-haspopup="dialog" title="Choisir les personnes à afficher">Tout le monde ▾</button>
+      <label class="tog"><input type="checkbox" id="libres"> Shifts en banque</label>
+      <label class="tog"><input type="checkbox" id="conges"> Congés</label>
+      <div class="seg" role="group" aria-label="Vue">
+        <button data-v="mois">Mois</button><button data-v="semaine"><span class="lg-sem">Semaine</span><span class="ct-sem">Sem.</span></button><button data-v="jour">Jour</button>
+      </div>
+      <button class="btn" id="bPlan" title="Qui est assis quand, pour la journée affichée — en test : un brouillon à vérifier">Plan du jour <span class="beta">bêta</span></button>
+      <button class="btn" id="bLeg" hidden title="Ce que veulent dire les couleurs">Légende</button>
+      <button class="btn" id="bPlein" hidden
+         title="Ouvrir l'horaire dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; <span class="lg-plein">Plein écran</span></button>
+    </div>
+  </div>
+  <div id="status">Chargement…</div>
+  <main id="view"></main>
+  <div class="legend" id="legend"></div>
+</div>
+<div id="popbg" hidden></div>
+<div id="pop" class="pop" role="dialog" aria-modal="true" hidden></div>
+
+<script>
+// A copy of this whole page as it was loaded, for the « Plein écran » button (taken before anything is drawn)
+const PAGE_SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
+/* =====================================================================================
+   CONFIG — ce qu'on change le plus souvent
+   ===================================================================================== */
+const CONFIG = {
+  // Lien de l'application Web de l'Admin. Worksheet (le même que le calendrier Shifts en banque,
+  // finissant par /exec). Vide = données d'exemple.
+  url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
+  avis: { minMois: 1, maxMois: 12, sansFinMois: 3 },   // « congé à venir » : annoncé aussi longtemps d'avance qu'il dure
+                            // (6 mois de congé = 6 mois d'avance), au moins minMois, au plus maxMois ; sans date de fin : sansFinMois
+  titre: 'Horaire St-Laurent',
+  // 'plan' = the « Plan du jour » page on its own (plan.html is this same file with mode: 'plan')
+  mode: 'plan',
+  vue: 'mois',              // vue au départ : 'mois', 'semaine' ou 'jour'
+  libres: true,             // montrer les Shifts en banque au départ
+  conges: false,            // montrer les congés au départ (sinon : case « Congés » à cocher)
+  nuitLendemain: false,     // true = une nuit s'affiche le jour où elle finit (comme l'Autobid)
+  minuitAvant: true,        // un quart qui commence à minuit (00:00) s'affiche le soir d'avant, après les nuits de 22 h 15 :
+                            // on voit les 2 quarts de nuit de chaque nuit ensemble (vues Mois, Semaine et Jour)
+  minuitVeille: true,       // (si minuitAvant est false) il reste à son jour, et se voit aussi, pâli, à la fin de la veille
+  debordeMin: 60,           // une nuit qui finit au moins n min après minuit se voit aussi (pâlie, « → 07:15 ») le
+                            // matin où elle finit : toujours en vue Semaine ; en vue Mois quand 1 à 4 personnes sont choisies
+  debordeMoisMax: 4,        // vue Mois : nombre maximum de personnes choisies pour montrer ces fins de nuit
+  debutSemaine: 0,          // premier jour des semaines (vues Mois et Semaine) : 0 = dimanche, 1 = lundi
+  maxLignes: 30,            // vue Mois : lignes par jour avant « + n de plus »
+  normale: 525,             // durée d'un quart normal en minutes (8 h 45) ; plus de 30 min de plus = quart prolongé
+  rafraichirMin: 30,        // recharger les données toutes les n minutes (0 = jamais)
+  // Sur téléphone (écran de moins de 640 px) :
+  //   'miniature' = le même affichage que sur ordinateur, réduit pour tenir dans la largeur ;
+  //   'compact'   = l'affichage pour téléphone (des compteurs par jour, toucher un jour pour le détail).
+  telephone: 'miniature',
+  reduction: 'auto',        // miniature : 'auto' (zoom, échelle sur iPhone/iPad), 'zoom' ou 'echelle'
+  largeurMini: 760,         // largeur (px) de l'affichage ordinateur qu'on réduit en mode 'miniature'
+  // Couleurs des quarts, dans cet ordre de priorité :
+  //   1. stagiaire (colonne « Stagiaire » de Contacts, Admin. Worksheet) : jaune, toujours
+  //   2. autre activité que Coverage (formation…) : gris
+  //   3. superviseur (S) : rouge
+  //   4. sinon, selon l'heure de début (HHMM) ; le premier groupe qui correspond l'emporte.
+  // (vert et orange sont gardés pour les Shifts en banque)
+  groupes: [
+    { nom: 'Jour',   lettre: 'J', de: '0400', a: '0959', couleur: '#0097a7', teinte: '#cdeef2' },
+    { nom: 'Nooner', lettre: 'N', de: '1000', a: '1259', couleur: '#8e24aa', teinte: '#ecd4f4' },
+    { nom: 'Soir',   lettre: 'S', de: '1300', a: '2059', couleur: '#1a5fd0', teinte: '#d3e2fc' },
+    { nom: 'Nuit',   lettre: 'M', de: '2100', a: '0359', couleur: '#6d4c41', teinte: '#e6d9d2' },
+  ],
+  autre:       { nom: 'Autre activité (formation…)', couleur: '#80868b', teinte: '#eeeeee' },
+  superviseur: { nom: 'Superviseur (S)',             couleur: '#c62828', teinte: '#f9d0d0' },
+  stagiaire:   { nom: 'Stagiaire',                   couleur: '#f2b600', teinte: '#fdedb0' },
+  tz: 'America/Toronto',
+  // Plan du jour : qui est assis quand (contrôleurs ; superviseurs, stagiaires et formations ne comptent pas)
+  plan: {
+    finAvant: 45, finAvantOT: 30,          // assis jusqu'à 45 min avant la fin du quart (30 min en OT)
+    minPos: [[0, 1], [600, 2], [1140, 1]], // positions au minimum : 1 avant 10 h, 2 de 10 h à 19 h, 1 ensuite (et la nuit)
+    maxPos: 5,
+    coupureNuit: 120,                      // 2 nuits : le 1er jusqu'à 02:00, le 2e ensuite jusqu'au matin
+  },
+};
+
+/* =====================================================================================
+   Outils de dates (les dates sont des chaînes « AAAA-MM-JJ », calculées en UTC : pas de piège
+   d'heure avancée) et d'heures (« HHMM »)
+   ===================================================================================== */
+const pad = n => String(n).padStart(2, '0');
+const toUTC = d => { const [y, m, j] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, j)); };
+const fromUTC = x => x.getUTCFullYear() + '-' + pad(x.getUTCMonth() + 1) + '-' + pad(x.getUTCDate());
+const addDays = (d, k) => { const x = toUTC(d); x.setUTCDate(x.getUTCDate() + k); return fromUTC(x); };
+// place in the week: 0 = first day (CONFIG.debutSemaine) … 6 = last day
+const dow = d => (toUTC(d).getUTCDay() - CONFIG.debutSemaine + 7) % 7;
+const debutDe = d => addDays(d, -dow(d));                             // first day of d's week
+const estWE = d => toUTC(d).getUTCDay() % 6 === 0;                    // Saturday or Sunday
+const JSEM = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'], utcDow = d => toUTC(d).getUTCDay();
+const firstOfMonth = d => d.slice(0, 8) + '01';
+const addMonths = (d, k) => { const x = toUTC(firstOfMonth(d)); x.setUTCMonth(x.getUTCMonth() + k); return fromUTC(x); };
+const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(toUTC(d));
+const mins = a => +a.slice(0, 2) * 60 + +a.slice(2);                 // « 0615 » → 375
+const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + String(m % 60).padStart(2, '0');   // 375 → « 0615 »
+const hm = a => a.slice(0, 2) + ':' + a.slice(2);                    // « 0615 » → « 06:15 »
+// length of a shift en banque, in brackets: « (8 h 30) », « (5 h) »
+const dureeL = l => { const m = l.fin - l.off; return `(${Math.floor(m / 60)} h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') : ''})`; };
+const code = a => String(+a);                                         // « 0615 » → « 615 »
+function nowLocal() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: CONFIG.tz, year: 'numeric',
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date()).map(x => [x.type, x.value]));
+  return { d: p.year + '-' + p.month + '-' + p.day, m: +p.hour * 60 + +p.minute };
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function groupe(a) {
+  for (const g of CONFIG.groupes) {
+    const ok = g.de <= g.a ? (a >= g.de && a <= g.a) : (a >= g.de || a <= g.a);
+    if (ok) return g;
+  }
+  return { nom: '?', lettre: '?', couleur: CONFIG.autre.couleur, teinte: CONFIG.autre.teinte };
+}
+const estStag = w => !!(S.data && (S.data.stag || []).includes(w));
+// colour of a shift: trainee (yellow, always — their shifts are usually OJT, not plain Coverage)
+// > other activity (grey) > supervisor (red) > its time group
+// a mixed shift (q.parts: part coverage, part something else) is coloured by its coverage, not grey
+const couleurQ = q => estStag(q.who) ? CONFIG.stagiaire : ((q.f & 4) && !q.parts) ? CONFIG.autre
+  : (q.f & 2) ? CONFIG.superviseur : q.g;
+const estGris = q => couleurQ(q) === CONFIG.autre;
+const GRIS_PART = '#e2e3e5';                       // the non-coverage part of a mixed shift
+// colour of one part of a mixed shift
+const couleurPart = (q, k) => k === 2 ? { couleur: CONFIG.autre.couleur, teinte: GRIS_PART }
+  : estStag(q.who) ? CONFIG.stagiaire : k === 1 ? CONFIG.superviseur : q.g;
+// two-tone (or more) background, in time order and to scale: 06:15–10:00 coverage, 10:00–15:00 grey…
+function degradeQ(q) {
+  if (!q.parts && q.prolonge && !estGris(q)) {
+    const dur = q.fin - q.off, pct = m => (100 * m / dur).toFixed(1) + '%', P = q.prolonge;
+    const seg = [[P.normal, couleurQ(q).teinte], [P.extra, P.gx.teinte]].sort((x, y) => x[0][0] - y[0][0]);
+    return `linear-gradient(90deg, ${seg.map(([r, c]) => `${c} ${pct(r[0])} ${pct(r[1])}`).join(', ')})`;
+  }
+  if (!q.parts) return '';
+  const dur = q.fin - q.off, base = couleurQ(q).teinte, pct = m => (100 * m / dur).toFixed(1) + '%';
+  const stops = []; let t = 0;
+  for (const p of q.parts) {
+    if (p.s0 > t) stops.push(`${base} ${pct(t)} ${pct(p.s0)}`);
+    const c = couleurPart(q, p.k).teinte;
+    stops.push(`${c} ${pct(Math.max(p.s0, t))} ${pct(p.s1)}`);
+    t = Math.max(t, p.s1);
+  }
+  if (t < dur) stops.push(`${base} ${pct(t)} 100%`);
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+const styleQ = q => { const c = couleurQ(q), g = degradeQ(q); return `--c:${c.couleur};--t:${c.teinte}` + (g ? `;--deg:${g}` : ''); };
+// what a shift shows: initials, « (S) » for a supervisor, then any activity that is not coverage
+const nomQ = q => q.who + (q.f & 2 ? ' (S)' : '');
+const labelQ = q => nomQ(q) + (q.act ? ' ' + q.act : '');
+// times in 24 h, with $ in front for overtime: « $06:15 - 15:00 »
+const heures = q => (q.f & 1 ? '$' : '') + hm(q.a) + ' - ' + hm(q.b);
+const titreQ = q => `${nomQ(q)} · ${heures(q)}` + (q.act ? ` · ${q.act}` : '') + (q.f & 1 ? ' · OT' : '') +
+  (estStag(q.who) ? ' · stagiaire' : '') + (q.prolonge ? ' · quart prolongé' : '') +
+  (minuitQ(q) ? ` · commence à minuit (nuit du ${fmt(addDays(q.day, -1), { weekday: 'long', day: 'numeric' })} au ${fmt(q.day, { day: 'numeric' })})` : '') +
+  (q.minuit ? ` · commence à minuit le ${fmt(q.jour, { weekday: 'long', day: 'numeric' })} (nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} au ${fmt(q.jour, { day: 'numeric' })})` : '');
+
+/* =====================================================================================
+   État
+   ===================================================================================== */
+const S = {
+  data: null, demo: false,
+  byDay: {}, congeDay: {}, libreDay: {},
+  vue: CONFIG.vue, cur: nowLocal().d, libres: CONFIG.libres, conges: CONFIG.conges,
+  sel: [],      // people ticked in the « Tout le monde » list (empty = everyone)
+  feries: {},   // 'yyyy-mm-dd' → holiday name (paid 1.5x), from the Setup tab
+  relache: [],  // [début, fin, note] : March break weeks (soft marker), from the Setup tab
+  who: '',      // = the one person when exactly one is ticked (one-person layouts), else ''
+};
+const mem = {
+  get(k) { try { return localStorage.getItem('horaireStl.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('horaireStl.' + k, v); } catch (e) { /* pas de stockage : tant pis */ } },
+};
+(function restaurer() {
+  const v = mem.get('vue'); if (['mois', 'semaine', 'jour'].includes(v)) S.vue = v;
+  const w = mem.get('who'); if (w) { S.sel = w.split(',').filter(Boolean); S.who = S.sel.length === 1 ? S.sel[0] : ''; }
+  const l = mem.get('libres'); if (l !== null) S.libres = l === '1';
+  const cg = mem.get('conges'); if (cg !== null) S.conges = cg === '1';
+})();
+
+/* =====================================================================================
+   Données : indexation par jour
+   ===================================================================================== */
+function indexer(d) {
+  S.byDay = {}; S.congeDay = {}; S.libreDay = {}; S.qs = [];
+  for (const w of d.gens || []) {
+    for (const [jour, a, b, f, act, parts] of (d.q && d.q[w]) || []) {
+      let g = groupe(a);
+      // long shift (more than 8 h 45 + 30 min): an early-in midnight (ends between 05:00 and 10:00) is a midnight;
+      // the normal 8 h 45 keep the shift's colour, the extra hours take the colour of the time they fall in
+      const dur0 = (mins(b) - mins(a) + 1440) % 1440 || 1440;
+      let prolonge = null;
+      if (dur0 > CONFIG.normale + 30) {
+        const finM = (mins(a) + dur0) % 1440, nuit = CONFIG.groupes.find(x => x.lettre === 'M');
+        if (nuit && g !== nuit && finM >= 300 && finM <= 600) {
+          prolonge = { extra: [0, dur0 - CONFIG.normale], normal: [dur0 - CONFIG.normale, dur0], gx: g };
+          g = nuit;
+        } else {
+          prolonge = { normal: [0, CONFIG.normale], extra: [CONFIG.normale, dur0],
+                       gx: groupe(hhmm((mins(a) + CONFIG.normale) % 1440)) };
+        }
+      }
+      // offset = minutes from the displayed day's midnight to the shift start
+      let day = jour, off = mins(a);
+      if (CONFIG.nuitLendemain && g.lettre === 'M' && mins(a) >= 720) { day = addDays(jour, 1); off -= 1440; }
+      const minuit = CONFIG.minuitAvant && !CONFIG.nuitLendemain && mins(a) === 0;
+      if (minuit) { day = addDays(jour, -1); off = 1440; }
+      let fin = off + ((mins(b) - mins(a) + 1440) % 1440 || 1440);
+      const q = { id: S.qs.length, day, jour, who: w, a, b, f: f || 0, act: act || '', g, off, fin, minuit };
+      if (prolonge) q.prolonge = prolonge;
+      // mixed shift: its parts [start, end, kind 0 coverage / 1 coverage (S) / 2 other, name], in minutes from the start
+      if (Array.isArray(parts) && parts.length) {
+        const dur = fin - off, rel = t => (mins(t) - mins(a) + 1440) % 1440;
+        q.parts = parts.map(([pa, pb, k, nom]) => {
+          const s0 = rel(pa); let s1 = rel(pb); if (s1 <= s0) s1 += 1440;
+          return { a: pa, b: pb, k, nom, s0: Math.min(s0, dur), s1: Math.min(s1, dur) };
+        }).filter(p => p.s1 > p.s0).sort((x, y) => x.s0 - y.s0);
+        if (!q.parts.length) delete q.parts;
+      }
+      S.qs.push(q);                                   // id → shift, for the details window
+      (S.byDay[day] = S.byDay[day] || []).push(q);
+    }
+    for (const j of (d.c && d.c[w]) || []) (S.congeDay[j] = S.congeDay[j] || []).push(w);
+  }
+  for (const [jour, a, b, c, places] of d.libres || []) {
+    let day = jour, off = mins(a);
+    if (CONFIG.nuitLendemain && mins(a) >= 1260) { day = addDays(jour, 1); off -= 1440; }
+    if (CONFIG.minuitAvant && !CONFIG.nuitLendemain && mins(a) === 0) { day = addDays(jour, -1); off = 1440; }
+    const fin = off + ((mins(b) - mins(a) + 1440) % 1440 || 1440);
+    (S.libreDay[day] = S.libreDay[day] || []).push({ a, b, code: c, places: places || 1, off, fin });
+  }
+  for (const k in S.byDay) S.byDay[k].sort((x, y) => x.off - y.off || (x.who < y.who ? -1 : 1));
+}
+const choisi = w => !S.sel.length || S.sel.includes(w);
+const quarts = d => (S.byDay[d] || []).filter(q => choisi(q.who));
+const conges = d => S.conges ? (S.congeDay[d] || []).filter(choisi) : [];
+// people on leave that day who have no shift that day, in alphabetical order
+const congesLibres = d => { const occ = new Set(quarts(d).map(q => q.who)); return conges(d).filter(w => !occ.has(w)).sort(); };
+const libres = d => (S.libres ? S.libreDay[d] || [] : []);
+const publie = d => !S.data || !S.data.horizon || d <= S.data.horizon;
+const estRelache = d => S.relache.some(r => d >= r[0] && d <= r[1]);
+// hover text for a March break day: « Relâche : <who, from the Setup tab> »
+const titreRelache = d => {
+  const qui = S.relache.filter(r => d >= r[0] && d <= r[1]).map(r => r[2]).filter(Boolean);
+  return qui.length ? 'Relâche : ' + qui.join(' / ') : 'Relâche scolaire';
+};
+// night shift that runs past midnight: also shown, faded, on the morning it ends
+const deborde = q => q.fin - 1440 >= CONFIG.debordeMin;
+const suites = (d, w) => (S.byDay[addDays(d, -1)] || [])
+  .filter(q => deborde(q) && (w ? q.who === w : choisi(q.who))).sort((x, y) => x.fin - y.fin || (x.who < y.who ? -1 : 1));
+const suitesMois = () => S.sel.length > 0 && S.sel.length <= CONFIG.debordeMoisMax;
+// shifts that start at midnight (00:00) the next day: also shown, faded, at the end of the evening before
+const minuitQ = q => CONFIG.minuitVeille && !CONFIG.minuitAvant && !CONFIG.nuitLendemain && q.off === 0;
+const minuits = (d, w) => (S.byDay[addDays(d, 1)] || [])
+  .filter(q => minuitQ(q) && (w ? q.who === w : choisi(q.who))).sort((x, y) => x.fin - y.fin || (x.who < y.who ? -1 : 1));
+const titreMinuit = q => `${nomQ(q)} · commence à minuit, ${fmt(q.day, { weekday: 'long', day: 'numeric' })} · ${heures(q)}`;
+const titreSuite = q => `${nomQ(q)} · fin de la nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} · ${heures(q)}` +
+  (q.act ? ` · ${q.act}` : '');
+
+/* =====================================================================================
+   Vue Mois
+   ===================================================================================== */
+function vueMois() { return grilleMois(S.cur, !!S.who); }
+
+// One month grid. empile = one person chosen: the following months are stacked underneath (remplirMois),
+// so days of the next/previous month are left blank here (they appear in their own month).
+function grilleMois(cur, empile) {
+  const today = nowLocal().d, first = firstOfMonth(cur), start = debutDe(first);
+  const nextMonth = addMonths(cur, 1);
+  const narrow = etroit();
+  let h = cur === S.cur ? '' : `<div class="mtitre">${fmt(first, { month: 'long', year: 'numeric' })}</div>`;
+  h += `<div class="month" data-mois="${cur.slice(0, 7)}">`;
+  for (let i = 0; i < 7; i++) h += `<div class="dow">${fmt(addDays(start, i), { weekday: narrow ? 'narrow' : 'short' })}</div>`;
+  for (let d = start; d < nextMonth || dow(d) !== 0; d = addDays(d, 1)) {
+    const dehors = d.slice(0, 7) !== cur.slice(0, 7);
+    if (empile && dehors) { h += '<div class="cell vide"></div>'; continue; }
+    const cls = ['cell'];
+    if (dehors) cls.push('out');
+    if (estWE(d)) cls.push('we');
+    if (d === today) cls.push('today');
+    if (!publie(d)) cls.push('np');
+    if (S.who && congeCycle(S.who, d)) cls.push('off');
+    if (estRelache(d)) cls.push('rel');
+    h += `<div class="${cls.join(' ')}"${narrow ? ` data-day="${d}"` : ''}>` +
+      `<span class="num${S.feries[d] ? ' fer' : ''}" data-day="${d}" title="${S.feries[d] ? 'Férié payé 1,5x : ' + esc(S.feries[d]) + ' · ' : ''}${estRelache(d) ? esc(titreRelache(d)) + ' · ' : ''}Voir la journée">${+d.slice(8)}</span>` +
+      `<span class="jsem" aria-hidden="true">${JSEM[utcDow(d)]}</span>` +
+      (S.feries[d] ? `<span class="fnom" title="Férié payé 1,5x">${esc(S.feries[d])}</span>` : '');
+    h += narrow ? caseEtroite(d) : caseLarge(d);
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+// One person chosen: add the following months under the current one until the space is filled,
+// plus one more to scroll to (12 at most).
+function remplirMois(v) {
+  for (let k = 1; k <= 12; k++) {
+    const plein = v.scrollHeight > v.clientHeight + 40;
+    v.insertAdjacentHTML('beforeend', grilleMois(addMonths(S.cur, k), true));
+    if (plein) break;
+  }
+}
+
+function caseLarge(d) {
+  const lignes = [];
+  // nights started the day before (1 to 4 people chosen): first, as they are the ones on at the start of the day
+  const sx = suitesMois() ? suites(d) : [];
+  if (S.who) {                                   // one person: Google-style event chips
+    for (const q of sx) lignes.push(`<span class="chip suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreSuite(q))}">` +
+      `<b>→ ${hm(q.b)}</b> fin de nuit</span>`);
+    for (const q of quarts(d)) lignes.push(`<span class="chip" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreQ(q))}">` +
+      `<b>${heures(q)}</b>${q.act ? ' ' + esc(q.act) : ''}</span>`);
+    for (const q of minuits(d)) lignes.push(`<span class="chip suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreMinuit(q))}">` +
+      `<b>${heures(q)}</b> à minuit</span>`);
+  } else {
+    // everyone, one line per person: other activities (grey), then each group in order,
+    // supervisors before coverage (Nuit together), each part by start time; then shifts en banque;
+    // leave (when « Congés » is ticked) at the very bottom
+    const ev = q => `<div class="ev" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreQ(q))}">` +
+      `<b>${esc(nomQ(q))}</b> <span class="hr">${heures(q)}</span>` +
+      `${q.act ? ' <span class="act">' + esc(q.act) + '</span>' : ''}</div>`;
+    for (const q of sx) lignes.push(`<div class="ev suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreSuite(q))}">` +
+      `<b>${esc(nomQ(q))}</b> <span class="hr">→ ${hm(q.b)}</span></div>`);
+    const qs = quarts(d).slice().sort((x, y) => rangMois(x) - rangMois(y) || x.off - y.off || (x.who < y.who ? -1 : 1));
+    for (const q of qs) lignes.push(ev(q));
+    // tomorrow's 00:00 shifts, after tonight's nights (faded: they belong to tomorrow)
+    for (const q of minuits(d)) lignes.push(`<div class="ev suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreMinuit(q))}">` +
+      `<b>${esc(nomQ(q))}</b> <span class="hr">${heures(q)}</span> <span class="act">à minuit</span></div>`);
+  }
+  for (const l of libres(d)) {
+    lignes.push(l.code
+      ? `<div class="ln libre" title="Shift en banque : ${hm(l.a)} - ${hm(l.b)} ${dureeL(l)}">` +
+        `<i class="dot" style="--c:var(--libre)"></i><span>Libre ${esc(l.code)} <span class="hr">${dureeL(l)}</span>${l.places > 1 ? ' ×' + l.places : ''}</span></div>`
+      : `<div class="ln libre p" title="Shift en banque partiel : ${hm(l.a)} - ${hm(l.b)} ${dureeL(l)}"><i class="dot" style="--c:var(--partiel)"></i>` +
+        `<span>Libre ${hm(l.a)} - ${hm(l.b)} <span class="hr">${dureeL(l)}</span>${l.places > 1 ? ' ×' + l.places : ''}</span></div>`);
+  }
+  if (S.who) { if (congesLibres(d).length) lignes.push(`<span class="chip conge" data-cg="${S.who}|${d}">Congé</span>`); }
+  else for (const w of congesLibres(d)) lignes.push(`<div class="ev cg" data-cg="${w}|${d}" title="${w} en congé"><b>${w}</b> <i>congé</i></div>`);
+  if (lignes.length > CONFIG.maxLignes) {
+    const n = lignes.length - CONFIG.maxLignes + 1;
+    return lignes.slice(0, CONFIG.maxLignes - 1).join('') + `<div class="more" data-day="${d}">+ ${n} de plus</div>`;
+  }
+  return lignes.join('');
+}
+
+// Month list order: 0 other activity; then per group (J, N, S): supervisors, then coverage;
+// Nuit (M) is one block. Unknown start times go after Nuit.
+function rangMois(q) {
+  if (estGris(q)) return 0;
+  const gi = CONFIG.groupes.indexOf(q.g), n = CONFIG.groupes.length;
+  if (gi < 0) return 2 * n + 1;
+  if (q.g.lettre === 'M') return 1 + 2 * gi;
+  return 1 + 2 * gi + (q.f & 2 ? 0 : 1);
+}
+
+function caseEtroite(d) {                         // phone: counts per group, tap the day for details
+  if (S.who) {
+    const q = quarts(d)[0];
+    if (q) return `<div class="pills"><span class="pill t" style="${styleQ(q)}" data-q="${q.id}">${q.f & 1 ? '$' : ''}${hm(q.a)}<br>${hm(q.b)}</span></div>`;
+    return congesLibres(d).length ? `<div class="pills"><span class="pill" style="--t:var(--soft)" data-cg="${S.who}|${d}">C</span></div>` : '';
+  }
+  // same order as the list: A = other activity, coverage per group, L = shifts en banque, C = on leave (if shown)
+  const n = {};
+  let a = 0;
+  for (const q of quarts(d)) if (estGris(q)) a++; else n[q.g.lettre] = (n[q.g.lettre] || 0) + 1;
+  const cg = congesLibres(d).length;
+  let h = '<div class="pills">';
+  if (a) h += `<span class="pill" style="--t:${CONFIG.autre.teinte}" title="Autre activité">A${a}</span>`;
+  for (const g of CONFIG.groupes) if (n[g.lettre]) h += `<span class="pill" style="--t:${g.teinte}">${g.lettre}${n[g.lettre]}</span>`;
+  const lb = libres(d).reduce((s, l) => s + l.places, 0);
+  if (lb) h += `<span class="pill" style="--t:#e6f4ea;color:var(--libre)">L${lb}</span>`;
+  if (cg) h += `<span class="pill" style="--t:var(--soft);color:var(--muted)" title="En congé">C${cg}</span>`;
+  return h + '</div>';
+}
+
+/* =====================================================================================
+   Vue Semaine — grille de l'équipe (une ligne par personne, comme l'Autobid)
+   ===================================================================================== */
+function vueSemaine() {
+  const today = nowLocal().d, start = debutDe(S.cur);
+  const jours = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  // the people ticked go first, highlighted; everyone else stays below for context
+  const tous = S.data.gens || [];
+  const gens = S.sel.filter(w => tous.includes(w)).concat(tous.filter(w => !S.sel.includes(w)));
+  let h = '<table class="week"><thead><tr><th class="who"></th>';
+  for (const d of jours) h += `<th class="${d === today ? 'today' : ''}${S.feries[d] ? ' fer' : ''}${estRelache(d) ? ' rel' : ''}" data-day="${d}" style="cursor:pointer"` +
+    `${S.feries[d] || estRelache(d) ? ` title="${[S.feries[d] ? 'Férié payé 1,5x : ' + esc(S.feries[d]) : '', estRelache(d) ? esc(titreRelache(d)) : ''].filter(Boolean).join(' · ')}"` : ''}>` +
+    `${fmt(d, { weekday: 'short' })}<span class="d">${+d.slice(8)}</span>` +
+    `${S.feries[d] ? `<span class="fn">${esc(S.feries[d])}</span>` : ''}</th>`;
+  h += '</tr></thead><tbody>';
+  for (const w of gens) {
+    h += `<tr class="${S.sel.includes(w) ? 'sel' : ''}"><th class="who" data-p="${w}">${w}</th>`;
+    for (const d of jours) {
+      const cls = [estWE(d) ? 'we' : '', publie(d) ? '' : 'np', S.sel.includes(w) && congeCycle(w, d) ? 'off' : ''].join(' ');
+      const qs = (S.byDay[d] || []).filter(q => q.who === w);
+      // the end of a night started the day before comes first (faded « → 07:15 »)
+      let c = suites(d, w).map(q => `<span class="sh suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreSuite(q))}">→ ${hm(q.b)}</span>`)
+        .concat(qs.map(q => `<span class="sh" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreQ(q))}">${heures(q)}</span>`))
+        .concat(minuits(d, w).map(q => `<span class="sh suite" style="${styleQ(q)}" data-q="${q.id}" title="${esc(titreMinuit(q))}">${hm(q.a)} →</span>`)).join(' ');
+      if (!qs.length && S.conges && (S.congeDay[d] || []).includes(w)) c += (c ? ' ' : '') + `<span class="cg" data-cg="${w}|${d}">congé</span>`;
+      h += `<td class="${cls}">${c}</td>`;
+    }
+    h += '</tr>';
+  }
+  h += '</tbody><tfoot>';
+  for (const g of CONFIG.groupes) {
+    h += `<tr><th class="who"><i class="dot" style="--c:${g.couleur}"></i> ${g.lettre}</th>`;
+    for (const d of jours) h += `<td>${(S.byDay[d] || []).filter(q => q.g === g).length || ''}</td>`;
+    h += '</tr>';
+  }
+  if (S.libres) {
+    h += '<tr><th class="who" style="color:var(--libre)">Libres</th>';
+    for (const d of jours) {
+      const l = S.libreDay[d] || [];
+      const c = l.filter(x => x.code).reduce((s, x) => s + x.places, 0), p = l.filter(x => !x.code).reduce((s, x) => s + x.places, 0);
+      const det = l.map(x => `${x.code ? 'Libre ' + x.code : 'Partiel ' + hm(x.a) + ' - ' + hm(x.b)} ${dureeL(x)}${x.places > 1 ? ' ×' + x.places : ''}`).join('\n');
+      h += `<td title="${det ? esc(det) : 'complets / partiels'}">${c ? `<span style="color:var(--libre)">${c}</span>` : ''}` +
+        `${c && p ? ' · ' : ''}${p ? `<span style="color:var(--partiel)">${p}p</span>` : ''}</td>`;
+    }
+    h += '</tr>';
+  }
+  return h + '</tfoot></table>';
+}
+
+/* =====================================================================================
+   Vue Jour — ligne du temps (qui travaille à quelle heure)
+   ===================================================================================== */
+function vueJour() {
+  const d = S.cur, qs = quarts(d), ls = libres(d), now = nowLocal();
+  // tomorrow's 00:00 shifts drawn faded after midnight (same shift, 1440 min later on this day's axis)
+  const mx = minuits(d).map(q => ({ q, off: q.off + 1440, fin: q.fin + 1440 }));
+  if (!qs.length && !ls.length) {
+    return `<div class="msg">${publie(d) ? 'Aucun quart ce jour-là.' : 'Horaire pas encore publié pour cette date.'}</div>`;
+  }
+  // axis: 5:00 → 8:00 the next morning, widened if a shift goes beyond
+  let lo = 300, hi = 1920;
+  for (const x of qs.concat(ls, mx)) { lo = Math.min(lo, Math.floor(x.off / 60) * 60); hi = Math.max(hi, Math.ceil(x.fin / 60) * 60); }
+  const pct = m => ((m - lo) / (hi - lo) * 100).toFixed(3) + '%';
+  let grid = '';
+  for (let m = lo; m <= hi; m += 60) grid += `<div class="grid ${m % 1440 === 0 ? 'mid' : ''}" style="left:${pct(m)}"></div>`;
+  let h = '<div class="day"><div class="row hours"><div class="lab"></div><div class="trk">';
+  const step = etroit() ? 180 : 120;
+  for (let m = lo + 60; m < hi; m += step) h += `<span style="left:${pct(m)}">${pad((m / 60 + 24) % 24)}:00</span>`;
+  h += '</div></div>';
+  const nowLine = d === now.d && now.m >= lo && now.m <= hi ? `<div class="nowline" style="left:${pct(now.m)}"></div>` : '';
+  for (const q of qs) {
+    h += `<div class="row"><div class="lab" data-q="${q.id}">${esc(nomQ(q))}</div><div class="trk">${grid}${nowLine}` +
+      `<div class="b" data-q="${q.id}" style="${styleQ(q)};left:${pct(q.off)};width:calc(${pct(q.fin)} - ${pct(q.off)})" title="${esc(titreQ(q))}">` +
+      `<b>${esc(nomQ(q))}</b> · ${heures(q)}${q.act ? ' · ' + esc(q.act) : ''}</div></div></div>`;
+  }
+  for (const { q, off, fin } of mx) {
+    h += `<div class="row"><div class="lab" data-q="${q.id}" style="opacity:.72;font-style:italic">${esc(nomQ(q))}</div><div class="trk">${grid}${nowLine}` +
+      `<div class="b suite" data-q="${q.id}" style="${styleQ(q)};left:${pct(off)};width:calc(${pct(fin)} - ${pct(off)})" title="${esc(titreMinuit(q))}">` +
+      `<b>${esc(nomQ(q))}</b> · ${heures(q)} · à minuit</div></div></div>`;
+  }
+  if (ls.length) {
+    h += '<div class="sep"></div>';
+    for (const l of ls) for (let i = 0; i < l.places; i++) {
+      h += `<div class="row"><div class="lab" style="color:${l.code ? 'var(--libre)' : 'var(--partiel)'}">Libre</div>` +
+        `<div class="trk">${grid}${nowLine}<div class="b libre ${l.code ? '' : 'p'}" style="left:${pct(l.off)};` +
+        `width:calc(${pct(l.fin)} - ${pct(l.off)})">${l.code ? 'Complet ' : 'Partiel '}${hm(l.a)} - ${hm(l.b)} ${dureeL(l)}</div></div></div>`;
+    }
+  }
+  const cg = conges(d);
+  const n = {};
+  for (const q of qs) n[q.g.lettre] = (n[q.g.lettre] || 0) + 1;
+  h += `<div class="sum">${qs.length} quart${qs.length > 1 ? 's' : ''} — ` +
+    CONFIG.groupes.filter(g => n[g.lettre]).map(g => `${g.nom} ${n[g.lettre]}`).join(' · ') +
+    (cg.length ? `<br>En congé : ${cg.join(' ')}` : '') + '</div>';
+  return h + '</div>';
+}
+
+/* =====================================================================================
+   Fenêtre de détails : un clic sur un quart (ou un congé, ou des initiales en vue Semaine)
+   ouvre une petite fenêtre au lieu de filtrer tout de suite. Sur téléphone, elle monte du bas.
+   ===================================================================================== */
+const duree = m => `${Math.floor(m / 60)} h ${pad(m % 60)}`;
+const jourLong = d => fmt(d, { weekday: 'long', day: 'numeric', month: 'long' });
+
+function boutons(w, d) {
+  let h = '<div class="btns">';
+  if (S.sel.includes(w)) h += S.sel.length === 1 ? '<button data-act="tous">Voir tout le monde</button>'
+                                                 : `<button data-act="retirer" data-w="${w}">Retirer ${w}</button>`;
+  else h += `<button data-act="filtre" data-w="${w}">Ne voir que ${w}</button>` +
+            (S.sel.length ? `<button data-act="ajouter" data-w="${w}">Ajouter ${w}</button>` : '');
+  if (d && !(S.vue === 'jour' && S.cur === d)) h += `<button data-act="jour" data-d="${d}">Voir la journée</button>`;
+  return h + '</div>';
+}
+
+function popQuart(q) {
+  const c = couleurQ(q);
+  // first tag = what gives the colour, then the time group and any other marks
+  const tags = [`<span style="background:${c.teinte}">${esc(c === q.g ? `${q.g.nom} (${q.g.lettre})` : c.nom)}</span>`];
+  if (c !== q.g) tags.push(`<span>${q.g.nom} (${q.g.lettre})</span>`);
+  if ((q.f & 2) && c !== CONFIG.superviseur) tags.push(`<span>${CONFIG.superviseur.nom}</span>`);
+  if (q.f & 1) tags.push('<span>$ Temps supplémentaire</span>');
+  if (q.prolonge) tags.push('<span>Quart prolongé</span>');
+  return { c: c.couleur, html:
+    `<h3>${esc(nomQ(q))}</h3><div class="dt">${q.minuit ? `Commence à minuit le ${jourLong(q.jour)} · nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} au ${fmt(q.jour, { day: 'numeric' })}`
+      : jourLong(q.day) + (minuitQ(q) ? ' · commence à minuit (fait partie du soir d\'avant)' : '')}</div>` +
+    `<div class="tm">${heures(q)} <small>${duree(q.fin - q.off)}${q.fin > 1440 ? ' · finit le lendemain' : ''}</small></div>` +
+    `<div class="tags">${tags.join('')}</div>` +
+    (q.parts
+      ? '<ul class="parts">' + q.parts.map(p => { const pc = couleurPart(q, p.k);
+          return `<li><i class="sq" style="background:${pc.teinte};border-color:${pc.couleur}"></i>` +
+            `<span class="j">${hm(p.a)} - ${hm(p.b)}</span><span>${esc(p.nom)}</span></li>`; }).join('') + '</ul>'
+      : (q.prolonge ? (() => {
+          const P = q.prolonge, t = m => hm(hhmm((mins(q.a) + m) % 1440)), c = couleurQ(q);
+          const rows = [[P.normal, c, `${q.g.nom} (${q.g.lettre})`], [P.extra, P.gx, `Heures en plus (${P.gx.nom.toLowerCase()})`]]
+            .sort((x, y) => x[0][0] - y[0][0]);
+          return '<ul class="parts">' + rows.map(([r, col, nom]) =>
+            `<li><i class="sq" style="background:${col.teinte};border-color:${col.couleur}"></i>` +
+            `<span class="j">${t(r[0])} - ${t(r[1])}</span><span>${esc(nom)}</span></li>`).join('') + '</ul>' +
+            (q.act ? `<div class="act">Activité : <b>${esc(q.act)}</b></div>` : '');
+        })()
+      : (q.act ? `<div class="act">Activité : <b>${esc(q.act)}</b></div>` : ''))) + boutons(q.who, q.day) };
+}
+
+function popConge(w, d) {
+  return { c: '#c4c7c5', html: `<h3>${esc(w)}</h3><div class="dt">${jourLong(d)}</div>` +
+    '<div class="tags"><span>Congé</span></div>' + boutons(w, d) };
+}
+
+function popPersonne(w) {                        // week view: that person's week at a glance
+  const start = debutDe(S.cur);
+  let li = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i);
+    const qs = (S.byDay[d] || []).filter(q => q.who === w);
+    const txt = qs.length ? qs.map(q => `<i class="dot" style="--c:${couleurQ(q).couleur}"></i>${heures(q)}` +
+      (q.act ? ` <span style="color:var(--muted)">${esc(q.act)}</span>` : '')).join('<br>')
+      : (S.congeDay[d] || []).includes(w) ? '<span style="color:var(--muted)">congé</span>' : '<span style="color:var(--muted)">—</span>';
+    li += `<li><span class="j">${fmt(d, { weekday: 'short', day: 'numeric' })}</span><span>${txt}</span></li>`;
+  }
+  return { c: '#9aa0a6', html: `<h3>${esc(w)}</h3><div class="dt">Semaine du ${fmt(start, { day: 'numeric', month: 'long' })}</div>` +
+    `<ul>${li}</ul>` + boutons(w, '') };
+}
+
+function ouvrirPop(p, el) {
+  const pop = document.getElementById('pop'), bg = document.getElementById('popbg');
+  const sheet = innerWidth < 640;
+  pop.style.setProperty('--c', p.c);
+  pop.classList.toggle('plan', p.cls === 'plan');
+  pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + p.html;
+  pop.classList.toggle('sheet', sheet);
+  pop.classList.toggle('large', !!p.large);
+  bg.classList.toggle('sheet', sheet);
+  // a frame much taller than the phone's screen (the Wix page): no « bottom of the window » the person can see
+  const flottant = sheet && innerHeight > (screen.height || 800) * 1.15;
+  pop.classList.toggle('flottant', flottant);
+  pop.style.maxHeight = flottant ? Math.round((screen.height || 800) * 0.8) + 'px' : '';
+  if (!flottant) pop.style.top = '';
+  bg.hidden = false; pop.hidden = false;
+  if (flottant && el) {                          // just under what was touched (or above it, near the end of the page)
+    const r = el.getBoundingClientRect(), h = pop.offsetHeight;
+    let y = r.bottom + 8;
+    if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 8);
+    pop.style.top = y + 'px';
+  }
+  if (!sheet) {                                  // next to the shift, inside the window
+    const r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    const x = Math.min(Math.max(8, r.left), innerWidth - w - 8);
+    let y = r.bottom + 6;
+    if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 6);
+    pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  }
+}
+
+function fermerPop() {
+  document.getElementById('pop').classList.remove('plan');
+  document.getElementById('pop').hidden = true;
+  document.getElementById('popbg').hidden = true;
+}
+
+document.getElementById('popbg').addEventListener('click', fermerPop);
+document.getElementById('pop').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  fermerPop();
+  const w = b.dataset.w;
+  if (b.dataset.act === 'filtre') choisir([w]);
+  else if (b.dataset.act === 'tous') choisir([]);
+  else if (b.dataset.act === 'ajouter') choisir(S.sel.concat(w));
+  else if (b.dataset.act === 'retirer') choisir(S.sel.filter(x => x !== w));
+  else if (b.dataset.act === 'jour') {
+    S.cur = b.dataset.d; S.vue = 'jour'; mem.set('vue', 'jour'); statut(); afficher();
+  }
+});
+
+/* =====================================================================================
+   Affichage, navigation, filtre
+   ===================================================================================== */
+// garderPop: redraw behind the open window (ticking people in the list) without closing it
+function afficher(garderPop) {
+  if (CONFIG.mode === 'plan') {                      // the Plan du jour page: the plan of the chosen day (today at first)
+    S.planJour = S.planJour || nowLocal().d;
+    document.title = 'Plan du jour — St-Laurent';
+    document.getElementById('view').innerHTML = '<div class="plan-page">' + htmlDuPlan(S.planJour) + '</div>';
+    return;
+  }
+  if (!garderPop) fermerPop();
+  if (S.sel.length && !S.cycles) chargerCycles();
+  const v = document.getElementById('view');
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.vue)));
+  document.getElementById('libres').checked = S.libres;
+  document.getElementById('conges').checked = S.conges;
+  const r = document.getElementById('range');
+  if (S.vue === 'mois') r.textContent = fmt(S.cur, { month: 'long', year: 'numeric' });
+  else if (S.vue === 'semaine') {
+    const a = debutDe(S.cur), b = addDays(a, 6);
+    r.textContent = a.slice(0, 7) === b.slice(0, 7)
+      ? `${+a.slice(8)} – ${+b.slice(8)} ${fmt(b, { month: 'short', year: 'numeric' })}`
+      : `${fmt(a, { day: 'numeric', month: 'short' })} – ${fmt(b, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  } else r.textContent = fmt(S.cur, etroit() ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
+    (S.feries[S.cur] ? ` · ${S.feries[S.cur]} (férié payé 1,5x)` : '') + (estRelache(S.cur) ? ' · relâche scolaire' : '');
+  if (!S.data) return;
+  const keep = v.scrollTop;
+  v.innerHTML = S.vue === 'mois' ? vueMois() : S.vue === 'semaine' ? vueSemaine() : vueJour();
+  if (S.vue === 'mois' && S.who) remplirMois(v);
+  v.scrollTop = keep;
+  if (S.vue === 'jour' && S.cur === nowLocal().d) v.scrollLeft = 0;
+}
+
+/* « Tout le monde ▾ »: a list of initials to tick. Nothing ticked = everyone. One person ticked = the
+   one-person layouts (chips in Mois, times in the phone view). Ticking redraws right away. */
+function choisir(liste, garderPop) {
+  const gens = (S.data && S.data.gens) || [];
+  S.sel = liste.filter((w, i) => liste.indexOf(w) === i && (!S.data || gens.includes(w)));
+  S.who = S.sel.length === 1 ? S.sel[0] : '';
+  mem.set('who', S.sel.join(','));
+  remplirFiltre(); statut(); afficher(garderPop);
+}
+
+function remplirFiltre() {
+  const gens = (S.data && S.data.gens) || [];
+  if (S.data) { S.sel = S.sel.filter(w => gens.includes(w)); S.who = S.sel.length === 1 ? S.sel[0] : ''; }
+  const n = S.sel.length;
+  document.getElementById('who').innerHTML =
+    (!n ? '<span class="lg-who">Tout le monde</span><span class="ct-who">Tous</span>' : n <= 3 ? esc(S.sel.join(', ')) : `${n} personnes`) + ' ▾';
+}
+
+function popFiltre() {
+  const gens = (S.data && S.data.gens) || [];
+  const cases = gens.map(w => `<label><input type="checkbox" data-w="${w}"${S.sel.includes(w) ? ' checked' : ''}>${w}</label>`).join('');
+  return { c: 'var(--accent)', large: true,
+    html: '<h3>Personnes à afficher</h3><div class="dt">Cochez une ou plusieurs personnes. Aucune case = tout le monde.</div>' +
+      `<div class="choix">${cases}</div>` +
+      '<div class="btns"><button data-act="tous">Tout le monde</button><button data-act="fermer">OK</button></div>' };
+}
+
+function legende() {
+  let h = CONFIG.groupes.map(g => `<span><i class="dot" style="--c:${g.couleur}"></i>${g.nom} (${g.lettre})</span>`).join('');
+  h += `<span><i class="dot" style="--c:${CONFIG.superviseur.couleur}"></i>${CONFIG.superviseur.nom}</span>`;
+  h += `<span><i class="dot" style="--c:${CONFIG.stagiaire.couleur}"></i>${CONFIG.stagiaire.nom}</span>`;
+  h += `<span><i class="dot" style="--c:${CONFIG.autre.couleur}"></i>${CONFIG.autre.nom} : texte après les initiales</span>`;
+  h += '<span>$ = OT</span>';
+  h += '<span>Deux couleurs = quart prolongé ou partagé entre deux activités</span>';
+  h += '<span><i class="dot" style="--c:#c4c7c5"></i>Congé</span>';
+  h += '<span><i class="dot" style="--c:var(--libre)"></i>Libre complet (8 h 30 en OT)</span>';
+  h += '<span><i class="dot" style="--c:var(--partiel)"></i>Libre partiel</span>';
+  h += '<span>Hachuré = pas encore publié</span>';
+  h += '<span><i style="opacity:.72;font-style:italic">→ 07:15</i> pâli = fin d\'une nuit commencée la veille</span>';
+  h += '<span><i class="dot" style="--c:var(--off)"></i>Gris = congé du cycle 5-4 de la personne choisie</span>';
+  h += '<span style="color:var(--ferie);font-weight:500">Date en rouge = férié payé 1,5x</span>';
+  h += '<span><i class="dot" style="--c:var(--relache)"></i>Trait mauve en haut du jour = relâche scolaire (repère)</span>';
+  document.getElementById('legend').innerHTML = h;
+  LEGENDE = h;
+}
+let LEGENDE = '';
+document.getElementById('bLeg').onclick = e => ouvrirPop({ c: 'var(--accent)', html: '<h3>Légende</h3><div class="legend">' + LEGENDE + '</div>' }, e.currentTarget);
+
+// « congé à venir » is announced as long before it starts as it lasts (a 6-month leave shows 6 months ahead),
+// at least CONFIG.avis.minMois, at most maxMois; a leave with no end date: sansFinMois.
+function congeAnnonce(debut, fin) {
+  if (!debut) return true;
+  const n = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+  const x = new Date(), auj = Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()) / 864e5;
+  const M = 30.44, A = CONFIG.avis;
+  const avis = fin ? Math.min(A.maxMois * M, Math.max(A.minMois * M, n(fin) - n(debut) + 1)) : A.sansFinMois * M;
+  return n(debut) - auj <= avis;
+}
+
+// one person chosen: say which 5-4 team the grey comes from (or why there is none)
+function cycleInfo() {
+  if (!S.who) return '';
+  const w = S.who.toUpperCase();
+  let t;
+  if (S.cyclesErr) t = `cycle 5-4 : ${S.cyclesErr}`;
+  else if (!S.cycles) t = 'cycle 5-4 : chargement…';
+  else if (S.cycles.eq[w]) {
+    const aujd = new Date(), jl = d => fmt(d, { day: 'numeric', month: 'long' });
+    const a = `${aujd.getFullYear()}-${String(aujd.getMonth() + 1).padStart(2, '0')}-${String(aujd.getDate()).padStart(2, '0')}`;
+    const mes = (S.cycles.conges || []).filter(c => c[0] === w && (!c[2] || c[2] >= a));
+    const cur = mes.find(c => !c[1] || c[1] <= a), proch = mes.filter(c => c[1] > a && congeAnnonce(c[1], c[2])).sort((x, y) => (x[1] < y[1] ? -1 : 1))[0];
+    const quoi = c => (c[3] && c[3] !== 'Congé prolongé' ? ' : ' + esc(c[3].toLowerCase()) : '');
+    t = `cycle 5-4 : équipe ${S.cycles.eq[w]}` + (cur ? ` (en congé${quoi(cur)}${cur[2] ? ` jusqu'au ${jl(cur[2])}` : ''})`
+      : proch ? ` (congé à venir ${proch[2] ? `du ${jl(proch[1])} au ${jl(proch[2])}` : `dès le ${jl(proch[1])}`})` : '');
+  }
+  else t = `${esc(w)} absent de la liste Cycles 5-4`;
+  return ` · ${t}`;
+}
+
+// « 15 nov. à 10 h 47 » from 'yyyy-MM-dd HH:mm'
+const quandESS = s => fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + (s.length >= 16 ? ` à ${+s.slice(11, 13)} h ${s.slice(14, 16)}` : '');
+function statut() {
+  const s = document.getElementById('status'), d = S.data;
+  if (!d) return;
+  const pub = d.horizon ? ` · horaire publié jusqu'au ${fmt(d.horizon, { day: 'numeric', month: 'long' })}` : '';
+  s.innerHTML = (S.demo ? '<span class="demo">Données d\'exemple (initiales fictives) — ajoutez le lien dans CONFIG.url.</span> ' : '') +
+    // last update = when the last ESS update reached the site (d.essVu), not our last check (d.at)
+    (d.ess && d.essVu ? `<b><span class="lg">Dernière mise à jour</span><span class="ct">Mise à jour</span> : ${esc(quandESS(d.essVu))}</b>` +
+             `<span class="det"> (publiée par ESS à ${esc(heureDe(d.ess, d.essVu))}) · vérifié ${esc(d.at ? quandESS(d.at) : '?')}</span>`
+     : d.ess ? `<b><span class="lg">Dernière mise à jour ESS</span><span class="ct">Mise à jour ESS</span> : ${esc(quandESS(d.ess))}</b>` +
+             `<span class="det"> · vérifié ${esc(d.at ? quandESS(d.at) : '?')}</span>`
+           : `Mis à jour : ${esc(d.at || '?')}`) + pub + cycleInfo() + '<span class="tip"> · cliquez un quart pour voir les détails</span>' +
+    ligneChangement(d);
+  compteARebours();
+}
+
+/* Second line: the last real change to the schedule (an ESS update that changed someone's shifts or leaves,
+   found by comparing with the previous one) and a countdown to when the next ESS update should be on the site.
+   ESS updates the calendars 8 times a day (3 h 47, 4 h 47, 9 h 47, 10 h 47, 15 h 47, 16 h 47, 21 h 47, 22 h 47 in
+   Nov. 2026); our hourly check brings it here about 40 min later. The times come from the server (d.plan),
+   learned from what it has seen, so they follow ESS if it changes them. */
+const minDe = s => Date.parse(s.slice(0, 10) + 'T' + s.slice(11, 16) + ':00Z') / 60000;   // clock minutes
+const maintenant = () => { const n = nowLocal(); return n.d + ' ' + String(Math.floor(n.m / 60)).padStart(2, '0') + ':' + String(n.m % 60).padStart(2, '0'); };
+const heureDe = (s, ref) => (s.slice(0, 10) === ref.slice(0, 10) ? '' : s.slice(0, 10) === addDays(ref.slice(0, 10), 1) ? 'demain ' : fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + ' ') +
+  `${+s.slice(11, 13)} h ${s.slice(14, 16)}`;
+function ligneChangement(d) {
+  if (!('chg' in d) && !d.plan) return '';
+  let t = '';
+  if ('chg' in d) {
+    const qui = d.chgQui || [];
+    t = d.chg
+      ? `<span class="lg">Dernier changement à l'horaire</span><span class="ct">Dernier changement</span> : ` +
+        (d.chgVu ? `<span title="Publié par ESS à ${esc(heureDe(d.chg, d.chgVu))}">${esc(quandESS(d.chgVu))}</span>`
+                 : `<span class="lg">mise à jour ESS du </span>${esc(quandESS(d.chg))}`) +
+        (qui.length ? ` <span title="${esc(qui.join(', '))}">(${qui.length <= 5 ? esc(qui.join(', ')) : qui.length + ' personnes'})</span>` : '')
+      : `Dernier changement à l'horaire : aucun depuis le ${esc(quandESS(d.chgDepuis || d.at))}`;
+  }
+  return `<span class="ligne2">${t}${t ? ' · ' : ''}<span id="compte"></span></span>`;
+}
+// the next ESS update after the one we have, and when it should be on the site
+function prochaineMaj() {
+  const d = S.data; if (!d || !d.plan || !d.plan.length) return null;
+  const base = d.ess || d.at || '';
+  return d.plan.find(x => !base || minDe(x[0]) > minDe(base) + 20) || null;
+}
+function compteARebours() {
+  const el = document.getElementById('compte'); if (!el) return;
+  const p = prochaineMaj();
+  if (!p) { el.innerHTML = ''; return; }
+  const now = maintenant(), reste = minDe(p[1]) - minDe(now);
+  const quand = `<span class="lg">Prochaine mise à jour ESS : ${esc(heureDe(p[0], now))}, sur le site vers ${esc(heureDe(p[1], p[0]))} — </span>`;
+  if (reste > 0) {
+    const h = Math.floor(reste / 60), m = reste % 60;
+    el.innerHTML = quand + `<span class="ct">prochaine mise à jour </span>dans ${h ? h + ' h ' + String(m).padStart(2, '0') : m + ' min'}`;
+  } else {
+    el.innerHTML = quand.replace(' — </span>', ' : </span>') + (S.verifie === p[0] ? '<span class="lg">pas encore arrivée · </span>' : '<span class="lg">devrait être arrivée · </span>') +
+      '<button class="rafr" id="rafr">Rafraîchir</button>';
+  }
+}
+document.addEventListener('click', e => {
+  if (e.target.id !== 'rafr') return;
+  const p = prochaineMaj(); e.target.textContent = 'Rafraîchissement…'; S.verifie = p && p[0]; charger();
+});
+setInterval(compteARebours, 20000);
+
+function aller(k) {
+  if (S.vue === 'mois') S.cur = addMonths(S.cur, k);
+  else S.cur = addDays(S.cur, S.vue === 'semaine' ? 7 * k : k);
+  afficher();
+}
+
+document.getElementById('bPrev').onclick = () => aller(-1);
+document.getElementById('bNext').onclick = () => aller(1);
+document.getElementById('bToday').onclick = () => { S.cur = nowLocal().d; afficher(); };
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  S.vue = b.dataset.v; mem.set('vue', S.vue); statut(); afficher();
+});
+document.getElementById('who').onclick = e => ouvrirPop(popFiltre(), e.currentTarget);
+document.getElementById('pop').addEventListener('change', e => {      // a box ticked in the people list
+  if (!e.target.matches('.choix input')) return;
+  const coches = [...document.querySelectorAll('#pop .choix input:checked')].map(i => i.dataset.w);
+  choisir(coches, true);
+});
+document.getElementById('libres').onchange = e => { S.libres = e.target.checked; mem.set('libres', S.libres ? '1' : '0'); afficher(); };
+document.getElementById('conges').onchange = e => { S.conges = e.target.checked; mem.set('conges', S.conges ? '1' : '0'); afficher(); };
+document.getElementById('view').addEventListener('click', e => {
+  const q = e.target.closest('[data-q]');
+  if (q) { ouvrirPop(popQuart(S.qs[+q.dataset.q]), q); return; }
+  const c = e.target.closest('[data-cg]');
+  if (c) { const [w, j] = c.dataset.cg.split('|'); ouvrirPop(popConge(w, j), c); return; }
+  const p = e.target.closest('[data-p]');
+  if (p) { ouvrirPop(popPersonne(p.dataset.p), p); return; }
+  const d = e.target.closest('[data-day]');
+  if (d) { S.cur = d.dataset.day; S.vue = 'jour'; mem.set('vue', 'jour'); statut(); afficher(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { fermerPop(); return; }
+  if (e.target.tagName === 'SELECT') return;
+  if (e.key === 'ArrowLeft') aller(-1);
+  if (e.key === 'ArrowRight') aller(1);
+});
+// redraw only when the width changes (phones fire « resize » when the address bar hides,
+// which would otherwise close the details window)
+// Size changes. Wix sometimes creates the frame tiny (or hidden) while the page loads and only then gives
+// it its real size — on a refresh, without always telling the frame. So the size is re-checked on every
+// « resize », by a ResizeObserver, and once a second as a safety net; a new width redraws the calendar.
+let resizeT, largeur = innerWidth, hauteur = innerHeight;
+function verifierTaille() {
+  if (innerWidth === largeur && innerHeight === hauteur) return;
+  const largeurChange = innerWidth !== largeur;
+  largeur = innerWidth; hauteur = innerHeight;
+  ajusterTaille();
+  if (largeurChange) { clearTimeout(resizeT); resizeT = setTimeout(afficher, 150); }
+}
+addEventListener('resize', verifierTaille);
+try { new ResizeObserver(verifierTaille).observe(document.documentElement); } catch (e) { /* old browser */ }
+setInterval(verifierTaille, 1000);
+
+// Phones (less than 640 px wide):
+//   'miniature' → lay the page out at CONFIG.largeurMini px, exactly as on a computer, then shrink it
+//                 to the real width (CSS zoom). The details window stays full size (it is outside #app).
+//   'compact'   → the phone layout (counts per day, tap a day to see it).
+// « Phone » = a touch screen with no mouse. Not the screen size: on a computer with a big zoom or display
+// scaling, the screen can measure under 640 px and the calendar wrongly shrank itself.
+const estTelephone = () => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+const zoomOK = (() => { try { return CSS.supports('zoom', '0.5'); } catch (e) { return false; } })();
+// iPhone / iPad: Safari up to iOS 16 (e.g. iPhone 8) shrinks the boxes with CSS zoom but not the text, so the
+// calendar is unreadable. There the page is shrunk with a transform (scale) instead: same look, every version.
+const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const parEchelle = () => CONFIG.reduction === 'echelle' || (CONFIG.reduction !== 'zoom' && ios) || !zoomOK;
+// Phone-sized frame: under 640 px on a phone, or under 480 px on a computer (Wix's phone preview and
+// phone editor are about 320–400 px wide), so the preview looks like the real phone.
+const cadreTelephone = () => innerWidth < (estTelephone() ? 640 : 480);
+function mini() { return CONFIG.mode !== 'plan' && CONFIG.telephone === 'miniature' && innerWidth > 0 && cadreTelephone(); }   // the plan page: never shrunk
+// compact layout: phones set to 'compact', or a very narrow frame on a computer
+function etroit() { return !mini() && cadreTelephone(); }
+let majPlein = () => {};                 // shows/hides « Plein écran » (set up at the end of the page)
+function ajusterTaille() {
+  majPlein();
+  // what the calendar measured, shown when hovering the « Mis à jour » line (to sort out display problems)
+  document.getElementById('status').title = `Cadre ${innerWidth} × ${innerHeight} px · écran ${screen.width} × ${screen.height}` +
+    ` · tactile seulement : ${estTelephone() ? 'oui' : 'non'} · affichage réduit : ${mini() ? (parEchelle() ? 'oui (échelle)' : 'oui (zoom)') : 'non'}` +
+    ` · compact : ${etroit() ? 'oui' : 'non'}`;
+  const app = document.getElementById('app');
+  if (mini()) {
+    const z = innerWidth / CONFIG.largeurMini;
+    app.style.width = CONFIG.largeurMini + 'px';
+    app.style.height = (innerHeight / z) + 'px';
+    if (parEchelle()) {                          // scale the drawing (text included); the layout stays 760 px
+      app.style.zoom = '';
+      app.style.transformOrigin = '0 0';
+      app.style.transform = `scale(${z})`;
+    } else {
+      app.style.transform = app.style.transformOrigin = '';
+      app.style.zoom = z;
+    }
+  } else {
+    app.style.width = app.style.height = app.style.zoom = app.style.transform = app.style.transformOrigin = '';
+  }
+  document.body.classList.toggle('etroit', etroit());
+  document.getElementById('bLeg').hidden = !etroit();
+}
+
+/* =====================================================================================
+   Cycles 5-4 — greys the days off of the people chosen, for any date (past or future)
+   ===================================================================================== */
+// Read from …/exec?type=equipe&quoi=cycles (the « Cycles 5-4 » tab of the Horaire file): start of the
+// period (= day 1 of the 9-day cycle) and each person's team. Team k works cycle days k … k+4.
+// People ticked « Congé prolongé » keep their grey too (their leave itself shows from their schedule).
+// Approved leaves (« Congés » list): the one going on today → « congé … », else the next one → « congé à venir ».
+// Loaded only when someone is chosen; reloaded every hour.
+function chargerCycles() {
+  if (S.cyclesEnCours) return;
+  S.cyclesEnCours = true;
+
+  const garder = (d, memoire) => {
+    S.cyclesEnCours = false;
+    if (!d || !d.debut || !Array.isArray(d.gens)) {
+      if (!S.cycles) { S.cyclesErr = 'réponse inattendue' + (d && d.erreur ? ' (' + d.erreur + ')' : ''); statut(); }
+      return;
+    }
+    if (!memoire) mem.set('cycles', JSON.stringify(d));   // next visit: shown instantly
+    S.cyclesErr = '';
+    S.cycles = { debut: d.debut, eq: Object.fromEntries(d.gens.map(g => [String(g[0]).trim().toUpperCase(), g[1]])),
+                 prolonge: d.gens.filter(g => g[3]).map(g => String(g[0]).trim().toUpperCase()),
+                 conges: (d.conges || []).map(c => [String(c[0]).trim().toUpperCase(), c[1] || '', c[2] || '', c[3] || '']) };
+    setTimeout(() => { S.cycles = null; }, 3600000);
+    statut(); afficher(true);
+  };
+  if (!S.cycles) {                                  // last answer seen: shown at once, then refreshed
+    try { const m = JSON.parse(mem.get('cycles') || 'null'); if (m) { garder(m, true); S.cyclesEnCours = true; } } catch (e) { /* ignore */ }
+  }
+  if (!CONFIG.url) {                                // sample data: invented teams (once the sample is loaded)
+    if (!S.data) { S.cyclesEnCours = false; return; }
+    garder({ debut: nowLocal().d, gens: S.data.gens.map((w, i) => [w, i % 9 + 1, 0, 0]) }, true); return;
+  }
+  const u = CONFIG.url + (CONFIG.url.indexOf('?') < 0 ? '?' : '&') + 'type=equipe&quoi=cycles';
+  fetch(u, { credentials: 'omit', cache: 'no-store' }).then(r => r.json())
+    .then(d => { if (!d || !d.gens) throw 0; garder(d); })
+    .catch(() => {
+      const cb = '__cycles' + Date.now(), sc = document.createElement('script');
+      window[cb] = d => { delete window[cb]; sc.remove(); garder(d); };
+      sc.onerror = () => { sc.remove(); S.cyclesEnCours = false; if (!S.cycles) { S.cyclesErr = 'chargement impossible'; statut(); } };
+      sc.src = u + '&callback=' + cb; document.head.appendChild(sc);
+    });
+}
+// Paid holidays: …/exec?type=equipe&quoi=feries (Setup D:E of the Admin. Worksheet). Read once per load.
+function chargerFeries() {
+  const garder = (d, memoire) => {
+    if (!d || !Array.isArray(d.feries)) return;
+    if (!memoire) mem.set('feries', JSON.stringify(d));
+    S.feries = Object.fromEntries(d.feries);
+    S.relache = Array.isArray(d.relache) ? d.relache : [];
+    afficher(true);
+  };
+  try { const m = JSON.parse(mem.get('feries') || 'null'); if (m) garder(m, true); } catch (e) { /* ignore */ }
+  if (!CONFIG.url) {                                // sample data
+    const y = nowLocal().d.slice(0, 4);
+    garder({ feries: [[`${y}-12-25`, 'Noël'], [`${y}-12-26`, 'Lendemain de Noël'], [`${+y + 1}-01-01`, "Jour de l'An"]],
+             relache: [[`${+y + 1}-02-20`, `${+y + 1}-03-07`, 'CSS de Montréal, Laval (exemple)']] }); return;
+  }
+  const u = CONFIG.url + (CONFIG.url.indexOf('?') < 0 ? '?' : '&') + 'type=equipe&quoi=feries';
+  fetch(u, { credentials: 'omit' }).then(r => r.json())
+    .then(d => { if (!d || !d.feries) throw 0; garder(d); })
+    .catch(() => {
+      const cb = '__feries' + Date.now(), sc = document.createElement('script');
+      window[cb] = d => { delete window[cb]; sc.remove(); garder(d); };
+      sc.onerror = () => sc.remove();
+      sc.src = u + '&callback=' + cb; document.head.appendChild(sc);
+    });
+}
+function congeCycle(w, d) {
+  const c = S.cycles, k = c && c.eq[String(w).toUpperCase()];
+  if (!k) return false;
+  const n = Math.round((toUTC(d) - toUTC(c.debut)) / 864e5);
+  const j = ((n % 9) + 9) % 9 + 1;                 // 1…9 in the cycle
+  return ((j - k + 9) % 9) >= 5;
+}
+
+/* =====================================================================================
+   Chargement (JSONP : une balise <script> vers l'application Web, pas de souci de CORS)
+   ===================================================================================== */
+function recevoir(d, demo) {
+  S.data = d; S.demo = !!demo;
+  indexer(d); remplirFiltre(); statut(); afficher();
+}
+
+// 1st try: a plain request WITHOUT the browser's Google sign-in (like a private window), so being
+// signed into several Google accounts can't break it. If that fails, 2nd try: the older JSONP way.
+function charger() {
+  if (!CONFIG.url) { recevoir(demo(), true); return; }
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20000);
+  fetch(CONFIG.url + (CONFIG.url.indexOf('?') < 0 ? '?' : '&') + 'type=equipe&t=' + Date.now(),
+        { credentials: 'omit', cache: 'no-store', signal: ctl.signal })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(txt => { const d = JSON.parse(txt); if (!d || !d.q) throw new Error('format'); clearTimeout(t); recevoir(d, false); })
+    .catch(() => { clearTimeout(t); chargerJsonp(); });
+}
+
+function chargerJsonp() {
+  const cb = '__horaireStl' + Date.now();
+  const s = document.createElement('script');
+  const fin = () => { delete window[cb]; s.remove(); clearTimeout(t); };
+  const t = setTimeout(() => { fin(); erreur('le serveur ne répond pas'); }, 25000);
+  window[cb] = d => { fin(); recevoir(d, false); };
+  s.onerror = () => { fin(); erreur('lien inaccessible'); };
+  s.src = CONFIG.url + (CONFIG.url.indexOf('?') < 0 ? '?' : '&') + 'type=equipe&callback=' + cb;
+  document.head.appendChild(s);
+}
+
+function erreur(why) {
+  const st = document.getElementById('status');
+  if (S.data) { st.innerHTML += ` · <span class="demo">mise à jour impossible (${esc(why)})</span>`; return; }
+  st.textContent = '';
+  document.getElementById('view').innerHTML = `<div class="msg">Impossible de charger l'horaire (${esc(why)}).<br>Réessayez dans quelques minutes.` +
+    '<br><br><small>Si la page marche dans une fenêtre privée : désactivez votre bloqueur de pubs pour ce site, ' +
+    'ou déconnectez vos autres comptes Google dans ce navigateur.</small></div>';
+}
+
+/* =====================================================================================
+   Données d'exemple — initiales fictives (Q…), cycles 5-4, quelques OT, congés et trous
+   ===================================================================================== */
+/* =====================================================================================
+   Plan du jour : qui est assis quand (moteur testé à part, tests/t_plan_jour.js)
+   ===================================================================================== */
+/* PLAN-MOTEUR-DEBUT */
+// Plan of the Day engine: who sits when, for one operational day (first morning arrival → next morning).
+// people: [{ i, s, e, ot }] — s/e = shift start/end in minutes from the day's 00:00 (a night shift that starts after
+// midnight: 1440 + …). Returns { lignes: [[minute, [initials…], note]], … } — a line each time the sitters change.
+const PLAN = Object.assign({
+  pas: 15,                 // time step (min)
+  finAvant: 45,            // stop sitting this long before the end of a regular shift
+  finAvantOT: 30,          // … of an OT shift
+  sieste: 60,              // ideal sit and ideal break: 1 h on, 1 h off
+  minSit: 30,              // never start a sit with less than this left before going home
+  minSitHeure: 45,         // on the hour, someone with less than this left sits only if nobody else can (the 13:30s
+                           // finish at 21:00, they don't start a half hour at 21:00)
+  resteNuit: 60,           // when the night starts (22:15), the evening sitters who leave within this get up
+  finCloser: 1410,         // the closer (the 1515, or anyone staying until 23:30 or later) sits the last part with the night:
+                           // from the hour before the night starts (22:00) until about 23:00; kept off the hour before
+  maxPos: 5,
+  minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
+  nuitDe: 1260,            // a shift starting from 21:00 is a night shift
+  coupureNuit: 120,        // with 2 night people: the first sits until 02:00, the second after
+  nuitTot: 1680,           // a shift that starts earlier but ends after 04:00 the next morning is a night too (early
+                           // arrival, e.g. 18:30-06:30): evening sits until the night starts, then the night's last turn
+  debutNuit: 1335,         // when the night position starts if nobody starts a night shift (22:15)
+  finAvantFen: 30,         // stop sitting this long before leaving the floor during the shift (leave, training…)
+}, CONFIG.plan || {});
+
+function planJour(gens, cfg) {
+  const C = Object.assign({}, PLAN, cfg || {});
+  const P0 = gens.map(g => {
+    const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
+    // a coverage window that ends before the shift (leave, training after it): off the floor 30 min before
+    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
+      .map(([a, b]) => [a, Math.min(b < g.e ? b - C.finAvantFen : b, fin)]).filter(([a, b]) => b > a);
+    return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
+  }).filter(p => p.blocs.length);
+  // early nights (18:30-06:30…): an evening part in the day rotation until the night starts, then a night part that
+  // takes the night's last turn (sleep, then 02:00 → morning); the regular night shifts keep the first turns
+  const vraies = P0.filter(p => p.nuit);
+  const debutNuit = vraies.length ? Math.min(...vraies.map(p => p.s)) : C.debutNuit;
+  const P = [];
+  P0.forEach(p => {
+    if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
+    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]], soir: true }));
+    P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
+  });
+  const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
+  // supervisors (sup) sit only if needed: to keep the minimum of positions (or the night, if no controller)
+  const sups = P.filter(p => p.sup && !p.nuit).sort(tri);
+  const jour = P.filter(p => !p.nuit && !p.sup).sort(tri);
+  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit))
+    .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
+  const debN = p => p.tot ? p.depart : p.s;          // when a night person can start the night position
+  if (!jour.length && !nuit.length) return [];
+  const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
+  // the night: one position, shared in turns (2 people: 22:15 → 02:00, then 02:00 → morning)
+  const tranches = [];
+  if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
+  else if (nuit.length >= 2) {
+    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = Math.max(debN(nuit[1]), debN(nuit[0]));
+    const bornes = [debN(nuit[0])];
+    if (fin1) bornes.push(fin1);
+    else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
+    bornes.push(matin);
+    nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
+  }
+  const nuitAssis = t => tranches.filter(([, a, b]) => t >= a && t < b).map(([p]) => p);
+  // closers: day shifts that end at midnight or later; heureFerm = the hour mark just before the night starts (22:00)
+  const heureFerm = tranches.length ? Math.floor((tranches[0][1] - 1) / 60) * 60 : null;
+  const closer = p => heureFerm != null && !p.nuit && !p.sup && !p.soir && p.e >= C.finCloser;
+  const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
+  // day: step by step (every 15 min); sitters change only for a reason:
+  //  R1 someone must go home → replaced; R2 fewer positions than the minimum → filled;
+  //  R3 on the hour: 1 h on / 1 h off rotation, and the number of positions follows who is there;
+  //  R4 short of staff (more positions than half the people): whoever has rested 45 min (30 if really short)
+  //     replaces whoever has sat the longest, as soon as that one has sat an hour — at any quarter hour;
+  //  R5 the first relief of the morning: the positions open from the first arrival (05:45), and each one who
+  //     arrives in the first hour (06:15) relieves someone who has sat 30 min.
+  const st = new Map([...jour, ...sups].map(p => [p, { on: false, depuis: p.s, neuf: true }]));
+  const finJour = jour.length || sups.length ? Math.max(...[...jour, ...sups].map(p => p.blocs[p.blocs.length - 1][1])) : t0;
+  const lignes = [];
+  let assisMin = 0, dispoMin = 0, Pt = 0;
+  const assisTot = new Map();
+  for (let t = t0; t < Math.max(finJour, nuit.length ? matin : 0); t += C.pas) {
+    const heure = t % 60 === 0;
+    const bloc = p => p.blocs.find(([a, b]) => t >= a && t < b), reste = p => { const b = bloc(p); return b ? b[1] - t : 0; };
+    // supervisors join the rotation only when the controllers alone can't keep the minimum (with one on a break);
+    // even then, a controller is always chosen first
+    const ctrl = jour.filter(p => bloc(p));
+    const miniJ = Math.max(0, minPos(t) - (t < finJour ? nuitAssis(t).length : 0));
+    const besoinSup = sups.some(p => bloc(p)) && miniJ > (ctrl.length >= 2 ? ctrl.length - 1 : ctrl.length);
+    const dispo = besoinSup ? [...ctrl, ...sups.filter(p => bloc(p))] : ctrl;
+    const on = () => [...jour, ...sups].filter(p => st.get(p).on);
+    const assis = p => t - st.get(p).depuis, repos = p => (st.get(p).neuf ? 1e9 : t - st.get(p).depuis);
+    const court45 = p => heure && (reste(p) < C.minSitHeure || (closer(p) && t === heureFerm - 60)) ? 1 : 0;
+    const debout = () => dispo.filter(p => !st.get(p).on && reste(p) >= C.minSit).sort((a, b) => (a.sup ? 1 : 0) - (b.sup ? 1 : 0) || court45(a) - court45(b) || repos(b) - repos(a) || a.fin - b.fin);
+    // serie = start of the current unbroken sit (getting up and sitting again in the same minute doesn't break it)
+    const lever = p => st.set(p, { on: false, depuis: t, serie: st.get(p).serie, leveA: t });
+    const asseoir = p => { const o = st.get(p); st.set(p, { on: true, depuis: t, neuf: false, serie: o.leveA === t && o.serie != null ? o.serie : t }); };
+    const serie = p => t - (st.get(p).serie != null ? st.get(p).serie : t);
+    const plusLong = () => on().sort((a, b) => (b.sup ? 1 : 0) - (a.sup ? 1 : 0) || assis(b) - assis(a));
+    if (!besoinSup) sups.forEach(p => { if (st.get(p).on && (heure || !bloc(p))) st.set(p, { on: false, depuis: t }); });
+    const n = dispo.length, nn = t < finJour ? nuitAssis(t).length : 0, mini = Math.max(0, minPos(t) - nn);
+    // R1 (and at the start of the night: the evening sitters who leave within the hour get up, the night takes over)
+    const debutTranche = tranches.length && t === tranches[0][1];
+    [...jour, ...sups].forEach(p => { if (st.get(p).on && (!bloc(p) || (debutTranche && reste(p) < C.resteNuit))) lever(p); });
+    // positions: half of those here (kept near 50 % over the day), between the minimum and the maximum, and never
+    // everyone at once when 2 or more are here (one must be on a break for the others to rotate)
+    // (not again in the first hour: the 05:45 positions stay until the 06:15 relieve them, R5)
+    if ((heure && t - t0 >= 60) || on().length > n || t === t0) {
+      let c = dispoMin && assisMin / dispoMin > 0.5 ? Math.floor(n / 2) : Math.ceil(n / 2);
+      c = Math.min(C.maxPos - nn, Math.max(mini, c));
+      if (n >= 2) c = Math.min(c, n - 1);
+      Pt = Math.max(nn ? 0 : Math.min(1, n), Math.min(c, n));
+    }
+    // short of staff: more positions than half the people, forced by the minimum (or the maximum of positions)
+    const court = Pt > n / 2 && (mini > Math.floor(n / 2) || Pt > Math.ceil(n / 2)), pause = !court ? C.sieste : n / Pt >= 1.5 ? 45 : 30;
+    // R3 (on the hour) / R4 (short, any quarter hour)
+    if (heure) {
+      // everyone who has sat 45 min or more gets up; the seats are then filled by the most rested
+      // (someone who just got up sits again only if nobody else can)
+      // (at 22:00, someone with 15 min or less left who has sat an hour or less finishes the sit until the night takes
+      // over: the 1415 sits 21:00-22:15)
+      const leves = plusLong().filter(x => (assis(x) >= C.sieste - 15 || reste(x) < C.minSit) &&
+        !(t === heureFerm && reste(x) <= C.pas && assis(x) <= C.sieste));
+      leves.forEach(lever);
+      // the closer takes a seat for the last stretch (22:00 → about 23:00, with the night from 22:15)
+      // (one closer: the most rested, as an extra seat; none if one is already on)
+      if (t === heureFerm && !on().some(closer)) dispo.filter(x => closer(x) && !st.get(x).on && reste(x) >= C.minSit)
+        .sort((a, b) => repos(b) - repos(a)).slice(0, 1).forEach(x => { asseoir(x); Pt = Math.max(Pt, on().length); });
+      while (on().length > Pt) lever(plusLong()[0]);
+      const tot = p => assisTot.get(p) || 0;
+      while (on().length < Pt) {
+        const c = debout().find(x => !leves.includes(x) && !court45(x) && repos(x) >= Math.min(pause, C.sieste - 15))
+          || debout().find(x => !leves.includes(x) && repos(x) >= Math.min(pause, C.sieste - 15))
+          || leves.filter(x => !st.get(x).on && bloc(x))                                     // keeps sitting: a controller
+               .sort((a, b) => (serie(a) >= 2 * C.sieste ? 1 : 0) - (serie(b) >= 2 * C.sieste ? 1 : 0)   // never a 3rd hour if avoidable,
+                 || (a.sup ? 1 : 0) - (b.sup ? 1 : 0) || serie(a) - serie(b) || tot(a) - tot(b))[0];          // then a controller, shortest sit
+        if (!c) break; asseoir(c);
+      }
+    } else if (court) {
+      for (const c of debout().filter(x => repos(x) >= pause)) {
+        const p = plusLong()[0]; if (!p || assis(p) < C.sieste) break; lever(p); asseoir(c);
+      }
+    }
+    // R2 (and the hour's new positions); never nobody while someone is here (even with less than 30 min left)
+    while (on().length < Pt && (heure || t === t0 || on().length < mini || !on().length)) { const c = debout()[0]; if (!c) break; asseoir(c); }
+    if (!on().length && !nn && dispo.length) asseoir(dispo.slice().sort((a, b) => reste(b) - reste(a))[0]);
+    // R6 the half-hour switch (13:30): someone who would have to leave at :45 gets up at :30, and their seat goes
+    // to whoever can't do another full hour (their last sit: 06:15 → 13:30-14:00), otherwise to the most rested
+    if (!heure && t % 30 === 0) on().filter(p => reste(p) < C.minSit).forEach(p => {
+      const L = debout().filter(x => repos(x) >= 30);
+      const c = L.filter(x => reste(x) < C.sieste + 30).sort((a, b) => reste(a) - reste(b))[0] || L[0];
+      if (c) { lever(p); asseoir(c); }
+    });
+    // R5
+    if (!heure && t > t0 && t - t0 <= 60) {
+      const arr = dispo.filter(x => x.s === t && !st.get(x).on);
+      for (const p of plusLong().filter(x => assis(x) >= 30)) { const c = arr.shift(); if (!c) break; lever(p); asseoir(c); }
+    }
+    [...jour, ...sups].forEach(p => { const s = st.get(p); if (s.neuf && !s.on && t >= p.s && t - p.s >= C.sieste) s.neuf = false; });
+    assisMin += on().length * C.pas; dispoMin += n * C.pas;
+    on().forEach(p => assisTot.set(p, (assisTot.get(p) || 0) + C.pas));
+    const qui = [...on(), ...nuitAssis(t)].map(p => p.i + (p.sup ? ' (S)' : ''));
+    const note = t < finJour && qui.length < minPos(t) ? 'court' : '';
+    const cle = qui.slice().sort().join(' ') + note;
+    if (!lignes.length || lignes[lignes.length - 1][3] !== cle) lignes.push([t, qui, note, cle]);
+  }
+  return lignes.map(([t, qui, note]) => [t, qui, note]);
+}
+/* PLAN-MOTEUR-FIN */
+/* PLAN-COTES-DEBUT */
+// Plan du jour — version « côtés » (brouillon, testée en parallèle du moteur actuel, moteur.js).
+// Comme les vrais plans : deux côtés qui alternent d'heure en heure, et chacun reste sur son côté.
+//   côté X : ouverture 05:45-06:15, les heures impaires (07, 09, 11), 13:00-13:30, puis les heures paires dès 14:00
+//            (14, 16, 18, 20) et, pour le closer (1515), 22:00-23:00 avec la nuit ;
+//   côté Y : 06:15-07:00, les heures paires (08, 10, 12), 13:30-14:00, puis les heures impaires dès 15:00
+//            (15, 17, 19) et 21:00-22:15.
+// La bascule de 13:00-13:30 / 13:30-14:00 est le « flip » habituel : un 1100 (X) fait 13:00-13:30 puis 14:00-15:00.
+// Chaque arrivée va du côté le moins chargé (ceux qui restent encore au moins 2 h) ; les 05:45 ouvrent sur X, les
+// 06:15 sur Y. Un côté qui tombe sous le minimum emprunte le plus reposé de l'autre côté (un flip, rarement).
+// Quelqu'un qui doit partir en plein tour est remplacé par le plus reposé de l'autre côté (« YH/GA »).
+// Quelqu'un qui arrive en cours d'heure et dont le côté ne s'assoit pas avant plus d'une heure s'assoit tout de suite pour
+// le reste de l'heure (pas 1 h 30 de pause en commençant un quart, en OT surtout).
+// Un superviseur peut compléter le nombre de positions voulu quand le monde manque : il est noté entre parenthèses,
+// « (XV) » = optionnel, selon le trafic sur le moment.
+// La nuit, les nuits qui entrent tôt et le superviseur pour le minimum : mêmes règles que moteur.js.
+const COTES = Object.assign({}, PLAN, {
+  grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
+    [660, 720, 'X'], [720, 780, 'Y'], [780, 810, 'X'], [810, 840, 'Y'], [840, 900, 'X'], [900, 960, 'Y'],
+    [960, 1020, 'X'], [1020, 1080, 'Y'], [1080, 1140, 'X'], [1140, 1200, 'Y'], [1200, 1260, 'X'], [1260, 1335, 'Y']],
+  closer: [1320, 1380],    // the closer's slot (side X), with the night from 22:15
+  resteCote: 180,          // a side's load = its members who stay at least this long after the arrival
+  reposFlip: 30,           // someone borrowed from the other side has rested at least this long (else: a 2 h sit)
+  // positions wanted by time of day (from the real plans): 2 at the opening, 3 from 07:00, 4 from 12:00,
+  // 3 from 19:00; never more than half of those here (rounded up), never fewer than the minimum
+  voulu: [[0, 1], [345, 2], [420, 3], [720, 4], [1140, 3], [1335, 1]],
+  supJusqua: 3,            // a supervisor tops up the positions only up to 3 (never 2 positions when 3 are wanted)
+});
+
+function planCotes(gens, cfg) {
+  const C = Object.assign({}, COTES, cfg || {});
+  // ---- the people (same preparation as moteur.js)
+  const P0 = gens.map(g => {
+    const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
+    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
+      .map(([a, b]) => [a, Math.min(b < g.e ? b - C.finAvantFen : b, fin)]).filter(([a, b]) => b > a);
+    return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
+  }).filter(p => p.blocs.length);
+  const vraies = P0.filter(p => p.nuit);
+  const debutNuit = vraies.length ? Math.min(...vraies.map(p => p.s)) : C.debutNuit;
+  const P = [];
+  P0.forEach(p => {
+    if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
+    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]], soir: true }));
+    P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
+  });
+  const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
+  const sups = P.filter(p => p.sup && !p.nuit).sort(tri);
+  const jour = P.filter(p => !p.nuit && !p.sup).sort(tri);
+  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit))
+    .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
+  if (!jour.length && !nuit.length) return [];
+  const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
+  // ---- the night (as moteur.js)
+  const debN = p => p.tot ? p.depart : p.s;
+  const tranches = [];
+  if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
+  else if (nuit.length >= 2) {
+    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = Math.max(debN(nuit[1]), debN(nuit[0]));
+    const bornes = [debN(nuit[0])];
+    if (fin1) bornes.push(fin1);
+    else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
+    bornes.push(matin);
+    nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
+  }
+  const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
+  const dispoDe = (p, a, b) => { const k = p.blocs.find(([x, y]) => x <= a && y > a); return k ? Math.min(b, k[1]) : null; };   // end of what p can do from a
+
+  // ---- sides: the standard shifts have theirs (05:45, 13:30, 15:15 → X ; 06:15, 14:15 → Y), an early night's evening
+  // is on Y (its last slot ends when the night starts), the others go to the lighter side (members still there 3 h
+  // later), and on a tie to the side whose next full hour comes later
+  // (decided when they arrive, with the sides as they are then — after any flip)
+  const cote = new Map(), origine = new Map(), finDe = p => p.blocs[p.blocs.length - 1][1];
+  const fixe = { 345: 'X', 375: 'Y', 810: 'X', 855: 'Y', 915: 'X' };
+  const placer = t => jour.filter(p => !cote.has(p) && p.s <= t).forEach(p => {
+    let c = fixe[p.s] || (P.some(q => q.tot && q.i === p.i && q.s === p.s) ? 'Y' : null);
+    if (!c) {
+      const charge = k => jour.filter(q => cote.get(q) === k && finDe(q) >= p.s + C.resteCote).length;
+      const prochain = k => { const g = C.grille.find(([a, b, s]) => s === k && a >= p.s && b - a >= 60); return g ? g[0] : 1e9; };
+      const cx = charge('X'), cy = charge('Y');
+      c = cx < cy ? 'X' : cy < cx ? 'Y' : prochain('X') > prochain('Y') ? 'X' : 'Y';
+    }
+    cote.set(p, c); origine.set(p, c);
+  });
+  const closerDe = p => !p.soir && p.e >= C.finCloser;
+
+  // ---- the sits, slot by slot
+  const sits = [];                                    // [p, from, to, optional]
+  const dernier = new Map();                          // p → end of its last sit
+  const repos = (p, t) => t - (dernier.has(p) ? dernier.get(p) : -1e9);
+  const finOuverture = jour.filter(p => p.s >= 375 && p.s < 420).length;   // the 06:15s relieve one for one
+  placer(t0);
+  for (const [a, b, k] of C.grille) {
+    if (b <= t0) continue;
+    const t = Math.max(a, t0);
+    placer(t);
+    let qui = jour.filter(p => cote.get(p) === k && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit);
+    // the closer keeps fresh for 22:00 (not in the 21:00-22:15 slot when someone else can sit)
+    if (a === 1260) qui = qui.filter(p => !closerDe(p) || qui.length === 1);
+    // opening: as many as the 06:15s who will relieve them
+    if (a === 345 && finOuverture) qui = qui.slice(0, Math.max(finOuverture, minPos(t)));
+    // too many: the most rested sit (maxPos)
+    // (most rested first — but a half hour, 13:00 or 13:30, goes first to those already here, not to a newcomer —
+    // then those on their own side, then those who stay later: the ones leaving sooner keep the reliefs)
+    const neuf = p => b - a < 60 && !dernier.has(p) ? 1 : 0;
+    qui.sort((x, y) => neuf(x) - neuf(y) || repos(y, t) - repos(x, t) || (origine.get(x) === k ? 0 : 1) - (origine.get(y) === k ? 0 : 1) ||
+      finDe(y) - finDe(x) || tri(x, y));
+    const nn = tranches.filter(([, x, y]) => t >= x && t < y).length;
+    qui = qui.slice(0, Math.max(0, C.maxPos - nn));
+    // positions wanted: the profile, at most half of those here (rounded up), at least the minimum
+    // (the pool: those who can sit in this slot or the next one; the wanted number is reached when there are 2
+    // people per position, otherwise half the pool — a supervisor who helps is his own choice)
+    const suivant = C.grille.find(([x]) => x >= b), b2 = suivant ? suivant[1] : b;
+    const pool = jour.filter(p => p.s <= (suivant ? suivant[0] : b) && p.blocs.some(([x, y]) => x < b2 && y - Math.max(x, t) >= C.minSit)).length;
+    let voulu = 1; for (const [de, x] of C.voulu) if ((t % 1440) >= de) voulu = x;
+    const cible = Math.max(minPos(t) - nn, (pool >= 2 * voulu ? voulu : Math.min(voulu, Math.floor(pool / 2))) - nn);
+    qui.slice(Math.max(cible, 0)).forEach(p => { if (origine.get(p) !== k) cote.set(p, origine.get(p)); });
+    qui = qui.slice(0, Math.max(cible, 0));
+    // too few: borrow from the other side — the most rested (a 30 min break or more), else someone who has sat only
+    // this last hour (a 2 h sit) — and they switch sides (a flip); then a supervisor for the minimum
+    const autres = () => jour.filter(p => cote.get(p) !== k && !qui.includes(p) && dispoDe(p, t, b) != null &&
+      dispoDe(p, t, b) - t >= C.minSit).sort((x, y) => repos(y, t) - repos(x, t));
+    while (qui.length < cible) {
+      const x = autres().find(p => repos(p, t) >= C.reposFlip) || autres().find(p => !sits.some(([q, , f]) => q === p && f === t && sits.some(([r, , g]) => r === p && g < t && g >= t - 60)));
+      if (!x) break; qui.push(x); cote.set(x, k);
+    }
+    while (qui.length + nn < minPos(t)) { const x = sups.find(s => !qui.includes(s) && dispoDe(s, t, b) != null); if (!x) break; qui.push(x); }
+    // a supervisor completes the wanted number when the staff alone can't — optional, in brackets
+    const option = new Set();
+    if (qui.length + nn < Math.min(voulu, C.supJusqua)) {
+      const x = sups.filter(s => !qui.includes(s) && dispoDe(s, t, b) != null && dispoDe(s, t, b) - t >= C.minSit)
+        .sort((u, v) => repos(v, t) - repos(u, t))[0];
+      if (x) { qui.push(x); option.add(x); }
+    }
+    // each one sits until the end of the slot or until they must leave; a seat left early goes to the most rested
+    // of the other side (« YH/GA »)
+    for (const p of qui) {
+      const f = dispoDe(p, t, b);
+      sits.push([p, t, f, option.has(p)]); dernier.set(p, f);
+      if (f < b && b - f >= C.minSit) {
+        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip)
+          .sort((x, y) => (cote.get(x) === k ? 1 : 0) - (cote.get(y) === k ? 1 : 0) || repos(y, f) - repos(x, f))[0];
+        if (r) { sits.push([r, f, b]); dernier.set(r, b); }
+      }
+    }
+    // arrivée : someone who arrives during this slot, on this side, whose side's next full hour is more than an hour
+    // away, sits right away for the rest of the slot (an extra seat)
+    placer(b - 1);
+    jour.filter(p => p.s > t && p.s < b && b - p.s >= C.minSit && cote.get(p) === k && !dernier.has(p) && dispoDe(p, p.s, b) != null)
+      .forEach(p => {
+        const g = C.grille.find(([x, y, c]) => c === k && x >= b && y - x >= 60);
+        if (g && g[0] - p.s > 60) { sits.push([p, p.s, dispoDe(p, p.s, b)]); dernier.set(p, dispoDe(p, p.s, b)); }
+      });
+  }
+  // ---- (the newcomers' early sit is done in the loop above, see « arrivée »)
+  // the closer: 22:00 → until they leave, with the night from 22:15 (the most rested one)
+  const cl = jour.filter(p => closerDe(p) && dispoDe(p, C.closer[0], C.closer[1]) != null)
+    .sort((x, y) => repos(y, C.closer[0]) - repos(x, C.closer[0]))[0];
+  if (cl && tranches.length) sits.push([cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1])]);
+
+  // ---- the lines: a line each time the sitters change
+  const lignes = [];
+  const fin = Math.max(matin, ...sits.map(x => x[2]));
+  for (let t = t0; t < fin; t += C.pas) {
+    const enCours = sits.filter(([, x, y]) => t >= x && t < y);
+    const opt = new Set(enCours.filter(x => x[3]).map(([p]) => p));
+    const tous = [...enCours.map(([p]) => p), ...tranches.filter(([, x, y]) => t >= x && t < y).map(([p]) => p)];
+    const qui = tous.filter((p, i) => tous.indexOf(p) === i).map(p => opt.has(p) ? '(' + p.i + ')' : p.i + (p.sup ? ' (S)' : ''));
+    const note = t < debutNuit && qui.length - opt.size < minPos(t) ? 'court' : '';
+    const cle = qui.slice().sort().join(' ') + note;
+    if (!lignes.length || lignes[lignes.length - 1][3] !== cle) lignes.push([t, qui, note, cle]);
+  }
+  return lignes.map(([t, qui, note]) => [t, qui, note]);
+}
+/* PLAN-COTES-FIN */
+const hhmmP = m => { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + pad(m % 60); };
+// the people of an operational day: the day shifts of that date, then its nights (22:15, 23:00, and the 00:00 of
+// the next date, shown the evening before). Supervisors, trainees and other activities don't sit.
+function gensPlan(day) {
+  const pris = [], hors = [];
+  for (const q of S.byDay[day] || []) {
+    const pourquoi = estStag(q.who) ? 'stagiaire' : ((q.f & 4) && !q.parts) ? (q.act || 'autre activité') : '';
+    if (pourquoi) { hors.push([q.who, pourquoi]); continue; }
+    const fen = q.parts ? q.parts.filter(x => x.k === 0 || x.k === 1).map(x => [q.off + x.s0, q.off + x.s1]) : null;
+    if (fen && !fen.length) { hors.push([q.who, q.act || 'autre activité']); continue; }
+    pris.push({ i: q.who, s: q.off, e: q.fin, ot: !!(q.f & 1), sup: !!(q.f & 2), fen, a: q.a, b: q.b });
+  }
+  return { pris: pris.sort((x, y) => x.s - y.s || (x.i < y.i ? -1 : 1)), hors };
+}
+S.planJour = null; S.planSans = {};
+S.planVue = (() => { try { return localStorage.getItem('planVue') || 'pos'; } catch (x) { return 'pos'; } })();
+S.planMoi = null;
+S.planMoteur = (() => { try { return localStorage.getItem('planMoteur') === 'cotes' ? 'cotes' : 'actuel'; } catch (x) { return 'actuel'; } })();
+// the plan's lines for a day, with the chosen engine and without the people unticked
+function lignesDuPlan(day) {
+  const { pris } = gensPlan(day), sans = S.planSans[day] || [];
+  return (S.planMoteur === 'cotes' ? planCotes : planJour)(pris.filter(p => !sans.includes(p.i)));
+}
+// 'DW' | 'XV (S)' | '(XV)' → { i, opt }
+const nomPlan = s => ({ i: s.replace(/^\(|\)$/g, '').replace(/ \(S\)$/, ''), opt: /^\(/.test(s), sup: / \(S\)$/.test(s) });
+// Positions: one column per position; a person keeps their column while seated, so a sit that goes on over several
+// lines is one tall box (07:00 DW YM, 07:30 + IF: DW and YM are not written again)
+function vuePositions(lignes) {
+  if (!lignes.length) return '<div class="plan-aide">Personne à l\'horaire.</div>';
+  const L = Math.max(1, ...lignes.map(l => l[1].length)), blocs = [];
+  let avant = Array(L).fill(null);
+  lignes.forEach(([t, qui], r) => {
+    const noms = qui.map(nomPlan), lanes = Array(L).fill(null);
+    avant.forEach((x, j) => { const n = x && noms.find(y => y.i === x.n.i && y.opt === x.n.opt); if (n) { lanes[j] = { n, b: x.b }; x.b.fin = r + 1; } });
+    noms.filter(n => !lanes.some(x => x && x.n === n)).forEach(n => {
+      const j = lanes.findIndex(x => !x); const b = { n, j, debut: r, fin: r + 1 }; blocs.push(b); lanes[j] = { n, b };
+    });
+    avant = lanes;
+  });
+  let h = `<div class="plan-pos" style="grid-template-columns:44px repeat(${L},minmax(0,1fr))">`;
+  lignes.forEach(([t, , note], r) => { h += `<div class="h${note ? ' court' : ''}" style="grid-row:${r + 1}"${note ? ' title="1 position seulement"' : ''}>${hhmmP(t).replace(/(..)(..)/, '$1:$2')}</div>`; });
+  blocs.forEach(b => {
+    const moi = S.planMoi === b.n.i ? ' moi' : '';
+    h += `<div class="q${b.n.opt ? ' opt' : ''}${moi}" data-plan="moi" data-i="${esc(b.n.i)}" style="grid-column:${b.j + 2};grid-row:${b.debut + 1}/${b.fin + 1}"` +
+      `${b.n.opt ? ' title="Optionnel : selon le trafic"' : ''}>${esc(b.n.i)}${b.n.sup ? ' (S)' : ''}</div>`;
+  });
+  return h + '</div>';
+}
+// Par personne: one row per person, their sits as bars on the day's timeline, initials written on each bar
+function vuePersonnes(lignes) {
+  if (!lignes.length) return '<div class="plan-aide">Personne à l\'horaire.</div>';
+  const t0 = lignes[0][0], t1 = Math.max(lignes[lignes.length - 1][0] + 60, t0 + 1440), px = 0.75;   // 45 px per hour
+  const W = Math.round((t1 - t0) * px), x = t => Math.round((t - t0) * px);
+  const gens = new Map();
+  lignes.forEach(([t, qui], r) => {
+    const fin = r + 1 < lignes.length ? lignes[r + 1][0] : t1;
+    qui.map(nomPlan).forEach(n => {
+      if (!gens.has(n.i)) gens.set(n.i, []);
+      const segs = gens.get(n.i), d = segs[segs.length - 1];
+      if (d && d.b === t && d.opt === n.opt) d.b = fin; else segs.push({ a: t, b: fin, opt: n.opt });
+    });
+  });
+  let ech = '', grille = '';
+  for (let t = Math.ceil(t0 / 60) * 60; t < t1; t += 60) {
+    if (((t / 60) % 2) === 0) ech += `<span style="left:${30 + x(t)}px">${pad((t / 60) % 24)}</span>`;
+    grille += `<div class="grille" style="left:${30 + x(t)}px"></div>`;
+  }
+  let h = `<div class="plan-pers"><div style="position:relative;width:${W + 34}px">${grille}<div class="ech">${ech}</div>`;
+  gens.forEach((segs, i) => {
+    const moi = S.planMoi === i ? ' moi' : '';
+    h += `<div class="ligne"><span class="nom" data-plan="moi" data-i="${esc(i)}">${esc(i)}</span>` + segs.map(sg =>
+      `<div class="b${sg.opt ? ' opt' : ''}${moi}" data-plan="moi" data-i="${esc(i)}" style="left:${30 + x(sg.a)}px;width:${Math.max(x(sg.b) - x(sg.a) - 1, 4)}px"` +
+      ` title="${esc(i)} ${hhmmP(sg.a).replace(/(..)(..)/, '$1:$2')}-${hhmmP(sg.b).replace(/(..)(..)/, '$1:$2')}${sg.opt ? ' (optionnel)' : ''}">${x(sg.b) - x(sg.a) >= 18 ? esc(i) : ''}</div>`).join('') + '</div>';
+  });
+  return h + '</div></div>';
+}
+function vueDuPlan(day) {
+  if (S.planVue === 'txt') return `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>`;
+  const l = lignesDuPlan(day);
+  return S.planVue === 'pers' ? vuePersonnes(l) : vuePositions(l);
+}
+function texteDuPlan(day) {
+  const lignes = lignesDuPlan(day);
+  return `Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
+    (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
+}
+function ouvrirPlan(el) {
+  if (CONFIG.mode === 'plan') { afficher(); return; }
+  const day = S.planJour || S.cur;
+  S.planJour = day;
+  const html = htmlDuPlan(day);
+  const pop = document.getElementById('pop');
+  if (!pop.hidden && pop.classList.contains('plan')) { pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + html; return; }
+  ouvrirPop({ c: 'var(--accent)', html, cls: 'plan' }, el);
+}
+function htmlDuPlan(day) {
+  const { pris, hors } = gensPlan(day), sans = S.planSans[day] || [];
+  const nb = pris.length - pris.filter(p => sans.includes(p.i)).length;
+  const html = `<h3>Plan du jour <span class="beta">bêta</span></h3>` +
+    `<div class="plan-beta">En test : un brouillon calculé à partir de l'horaire ESS, pas le plan officiel. Le superviseur décide.</div>` +
+    `<div class="plan-nav"><button data-plan="prec" aria-label="Jour précédent">&#8249;</button><b>${esc(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` +
+    `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
+    `<div class="plan-mot">${[['actuel', 'Actuel'], ['cotes', 'Côtés (essai)']].map(([v, n]) =>
+      `<button data-plan="mot" data-v="${v}"${S.planMoteur === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
+    `<div class="plan-vues">${[['pos', 'Positions'], ['pers', 'Par personne'], ['txt', 'Texte']].map(([v, n]) =>
+      `<button data-plan="vue" data-v="${v}"${S.planVue === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
+    `<div id="planVue">${vueDuPlan(day)}</div>` +
+    `<div class="plan-act"><button data-plan="copier">Copier</button><span id="planCopie"></span></div>` +
+    `<div class="plan-gens">${pris.map(p => `<label><input type="checkbox" data-plan="qui" value="${esc(p.i)}"${sans.includes(p.i) ? '' : ' checked'}> ${esc(p.i)} ` +
+      `${p.sup ? '(S) ' : ''}<span class="hr">${p.ot ? '$' : ''}${hm(p.a)}</span></label>`).join('')}</div>` +
+    (hors.length ? `<div class="plan-hors">Pas comptés : ${hors.map(([w, r]) => `${esc(w)} (${esc(r)})`).join(', ')}</div>` : '') +
+    `<div class="plan-aide">${nb} personne${nb > 1 ? 's' : ''} comptée${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Superviseurs (S) : assis seulement s'il le faut pour garder le minimum de positions. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
+    `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
+    `Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.` +
+    (S.planMoteur === 'cotes' ? ` <b>Côtés (essai)</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
+      `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position. ` +
+      `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
+  return html;
+}
+document.getElementById('bPlan').onclick = e => { S.planJour = S.cur; ouvrirPlan(e.currentTarget); };
+const clicPlan = e => {
+  const b = e.target.closest('[data-plan]'); if (!b) return;
+  const a = b.dataset.plan, day = S.planJour;
+  if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
+  else if (a === 'vue') { S.planVue = b.dataset.v; try { localStorage.setItem('planVue', S.planVue); } catch (x) { /* not kept */ } ouvrirPlan(); }
+  else if (a === 'moi') { S.planMoi = S.planMoi === b.dataset.i ? null : b.dataset.i; document.getElementById('planVue').innerHTML = vueDuPlan(day); }
+  else if (a === 'mot') { S.planMoteur = b.dataset.v; try { localStorage.setItem('planMoteur', S.planMoteur); } catch (x) { /* not kept */ } ouvrirPlan(); }
+  else if (a === 'qui') {
+    const l = new Set(S.planSans[day] || []); if (b.checked) l.delete(b.value); else l.add(b.value);
+    S.planSans[day] = [...l]; document.getElementById('planVue').innerHTML = vueDuPlan(day);
+  } else if (a === 'copier') {
+    // the text tab's text (edited or not); from the other tabs, the plan's text
+    let t = document.getElementById('planTxt'), tmp = null;
+    if (!t) { tmp = t = document.createElement('textarea'); t.value = texteDuPlan(day); t.style.cssText = 'position:absolute;left:-9999px'; document.body.appendChild(t); }
+    const ok = () => { document.getElementById('planCopie').textContent = 'Copié ✓'; if (tmp) tmp.remove(); };
+    const vieux = () => { t.select(); try { document.execCommand('copy'); ok(); } catch (x) { document.getElementById('planCopie').textContent = 'Sélectionné : Ctrl+C'; if (tmp) tmp.remove(); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(ok, vieux); else vieux();
+  }
+};
+document.getElementById('pop').addEventListener('click', clicPlan);
+document.getElementById('view').addEventListener('click', e => { if (CONFIG.mode === 'plan') clicPlan(e); });
+if (CONFIG.mode === 'plan') { document.body.classList.add('mode-plan'); document.title = 'Plan du jour — St-Laurent'; }
+
+function demo() {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const today = nowLocal().d, from = addDays(today, -35), to = addDays(today, 45);
+  const codes = ['0545', '0615', '0615', '1000', '1100', '1100', '1330', '1330', '1415', '1415', '1515', '2300', '2215', '0615'];
+  const fins = { '0545': '1430', '0615': '1500', '1000': '1845', '1100': '1945', '1330': '2215',
+                 '1415': '2300', '1515': '0000', '2300': '0745', '2215': '0700' };
+  const gens = 'QA QB QC QD QE QF QG QH QJ QK QL QM QN QP QR QS QT QU QV QW QX QY'.split(' ');
+  const q = {}, c = {}, libres = [];
+  gens.forEach((w, i) => {
+    q[w] = []; c[w] = [];
+    for (let d = from, k = 0; d <= to; d = addDays(d, 1), k++) {
+      const pos = (k + i * 2) % 9, bloc = Math.floor((k + i * 2) / 9);
+      if (pos < 5) {
+        if (rnd() < 0.05) { c[w].push(d); continue; }
+        const a = codes[(i * 5 + bloc * 3) % codes.length];
+        const autre = rnd() < 0.04, mixte = !autre && rnd() < 0.07, long = !autre && !mixte && rnd() < 0.05;
+        if (long) { q[w].push(rnd() < 0.6 ? [d, '1900', '0700', 0] : [d, '0615', '1815', 0]); continue; }
+        const sup = i % 7 === 3 ? 2 : 0;
+        if (mixte) {                                   // part coverage, then admin (like DB)
+          const mid = String((+a.slice(0, 2) + 4) % 24).padStart(2, '0') + a.slice(2);
+          q[w].push([d, a, fins[a], sup | 4, 'Admin', [[a, mid, sup ? 1 : 0, sup ? 'Coverage (S)' : 'Coverage'], [mid, fins[a], 2, 'Admin']]]);
+        } else {
+          q[w].push(autre ? [d, a, fins[a], sup | 4, rnd() < 0.5 ? 'Nat Refresher' : 'Formation OJT']
+                          : [d, a, fins[a], sup]);
+        }
+      } else if (rnd() < 0.06) {
+        const a = ['0615', '1330', '1100'][Math.floor(rnd() * 3)];
+        q[w].push([d, a, fins[a], 1]);
+      }
+    }
+  });
+  for (let d = today; d <= to; d = addDays(d, 1)) {
+    if (rnd() < 0.45) libres.push([d, '0615', '1445', '615', rnd() < 0.3 ? 2 : 1]);
+    if (rnd() < 0.3) libres.push([d, '1730', '2300', '', 1]);
+  }
+  const p = nowLocal(), hh = m => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+  // ESS times of yesterday, today and tomorrow (3 h 47, 4 h 47, 9 h 47…), each on the site 39 min later
+  const essH = [3, 4, 9, 10, 15, 16, 21, 22].map(h => h * 60 + 47);
+  const tous = [addDays(p.d, -1), p.d, addDays(p.d, 1)].flatMap(d => essH.map(m => [d + ' ' + hh(m), (m + 39 >= 1440 ? addDays(d, 1) : d) + ' ' + hh((m + 39) % 1440)]));
+  const ici = p.d + ' ' + hh(p.m), arrives = tous.filter(x => x[1] <= ici);
+  const ess = arrives.length ? arrives[arrives.length - 1][0] : p.d + ' 03:47';
+  const vu = x => x ? x[1].slice(0, 14) + String(+x[1].slice(14) - 5).padStart(2, '0') : '';   // our check ≈ 5 min before « on the site by »
+  const ch = arrives.length > 2 ? arrives[arrives.length - 3] : arrives[arrives.length - 1];
+  return { at: ici, ess, essVu: vu(arrives[arrives.length - 1]), chg: ch ? ch[0] : ess, chgVu: vu(ch), chgQui: ['QB', 'QM'], chgDepuis: addDays(p.d, -3) + ' 09:20',
+    plan: tous.filter(x => x[0] > ici), horizon: to, gens, q, c, stag: ['QX', 'QY'], libres };
+}
+
+/* ===================================================================================== */
+document.title = CONFIG.titre;
+ajusterTaille();
+// « Plein écran »: opens a new tab and writes this same page into it, so the calendar fills the whole
+// screen. No web address is involved (Wix's own address for this frame makes Chrome warn « this site
+// looks fake », and the Google web app page fails for people signed in to several Google accounts).
+// Shown only inside the Wix frame (not in the full-screen tab itself), phones included: in 'miniature' the
+// full-screen tab is wider than the Wix box, so the calendar is shrunk less; in 'compact' it is a small ⤢.
+(() => {
+  const b = document.getElementById('bPlein');
+  let dansCadre = true;
+  try { dansCadre = window.top !== window; } catch (e) { dansCadre = true; }
+  if (!dansCadre) return;
+  majPlein = () => { b.hidden = false; };   // also in 'miniature': the full-screen tab is wider, so less shrunk
+  majPlein();
+  b.onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { b.textContent = 'Fenêtre bloquée par le navigateur'; return; }
+    try {                                        // same origin: write the page straight into the tab
+      w.document.open(); w.document.write(PAGE_SOURCE); w.document.close();
+    } catch (e) {                                // sealed frame (Wix): hand the tab a copy of the page instead
+      w.location.href = URL.createObjectURL(new Blob([PAGE_SOURCE], { type: 'text/html' }));
+    }
+  };
+})();
+legende();
+remplirFiltre();
+afficher();
+charger();
+chargerFeries();
+chargerCycles();          // ready before anyone is chosen
+if (CONFIG.rafraichirMin > 0) setInterval(charger, CONFIG.rafraichirMin * 60000);
+</script>
+</body>
+</html>

@@ -234,6 +234,10 @@
   .plan-mot { display: flex; gap: 4px; margin: 0 0 8px; }
   .plan-mot button { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 14px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
   .plan-mot button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  body.mode-plan .bar, body.mode-plan #legend { display: none; }
+  body.mode-plan #view { max-width: 680px; margin: 0 auto; padding: 4px 12px 24px; box-sizing: border-box; }
+  body.mode-plan #status { max-width: 680px; margin: 0 auto; padding: 6px 12px 0; box-sizing: border-box; }
+  .plan-page h3 { margin: 4px 0 8px; font-size: 18px; font-weight: 500; }
   .plan-vues { display: flex; gap: 2px; margin: 0 0 8px; border-bottom: 1px solid var(--line); }
   .plan-vues button { border: 0; background: none; color: var(--muted); padding: 6px 10px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .plan-vues button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
@@ -350,6 +354,8 @@ const CONFIG = {
   avis: { minMois: 1, maxMois: 12, sansFinMois: 3 },   // « congé à venir » : annoncé aussi longtemps d'avance qu'il dure
                             // (6 mois de congé = 6 mois d'avance), au moins minMois, au plus maxMois ; sans date de fin : sansFinMois
   titre: 'Horaire St-Laurent',
+  // 'plan' = the « Plan du jour » page on its own (plan.html is this same file with mode: 'plan')
+  mode: 'calendrier',
   vue: 'mois',              // vue au départ : 'mois', 'semaine' ou 'jour'
   libres: true,             // montrer les Shifts en banque au départ
   conges: false,            // montrer les congés au départ (sinon : case « Congés » à cocher)
@@ -910,6 +916,12 @@ document.getElementById('pop').addEventListener('click', e => {
    ===================================================================================== */
 // garderPop: redraw behind the open window (ticking people in the list) without closing it
 function afficher(garderPop) {
+  if (CONFIG.mode === 'plan') {                      // the Plan du jour page: the plan of the chosen day (today at first)
+    S.planJour = S.planJour || nowLocal().d;
+    document.title = 'Plan du jour — St-Laurent';
+    document.getElementById('view').innerHTML = '<div class="plan-page">' + htmlDuPlan(S.planJour) + '</div>';
+    return;
+  }
   if (!garderPop) fermerPop();
   if (S.sel.length && !S.cycles) chargerCycles();
   const v = document.getElementById('view');
@@ -1146,7 +1158,7 @@ const parEchelle = () => CONFIG.reduction === 'echelle' || (CONFIG.reduction !==
 // Phone-sized frame: under 640 px on a phone, or under 480 px on a computer (Wix's phone preview and
 // phone editor are about 320–400 px wide), so the preview looks like the real phone.
 const cadreTelephone = () => innerWidth < (estTelephone() ? 640 : 480);
-function mini() { return CONFIG.telephone === 'miniature' && innerWidth > 0 && cadreTelephone(); }
+function mini() { return CONFIG.mode !== 'plan' && CONFIG.telephone === 'miniature' && innerWidth > 0 && cadreTelephone(); }   // the plan page: never shrunk
 // compact layout: phones set to 'compact', or a very narrow frame on a computer
 function etroit() { return !mini() && cadreTelephone(); }
 let majPlein = () => {};                 // shows/hides « Plein écran » (set up at the end of the page)
@@ -1730,8 +1742,15 @@ function texteDuPlan(day) {
     (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
 }
 function ouvrirPlan(el) {
+  if (CONFIG.mode === 'plan') { afficher(); return; }
   const day = S.planJour || S.cur;
   S.planJour = day;
+  const html = htmlDuPlan(day);
+  const pop = document.getElementById('pop');
+  if (!pop.hidden && pop.classList.contains('plan')) { pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + html; return; }
+  ouvrirPop({ c: 'var(--accent)', html, cls: 'plan' }, el);
+}
+function htmlDuPlan(day) {
   const { pris, hors } = gensPlan(day), sans = S.planSans[day] || [];
   const nb = pris.length - pris.filter(p => sans.includes(p.i)).length;
   const html = `<h3>Plan du jour <span class="beta">bêta</span></h3>` +
@@ -1753,12 +1772,10 @@ function ouvrirPlan(el) {
     (S.planMoteur === 'cotes' ? ` <b>Côtés (essai)</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
       `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position. ` +
       `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
-  const pop = document.getElementById('pop');
-  if (!pop.hidden && pop.classList.contains('plan')) { pop.innerHTML = '<button class="x" data-act="fermer" aria-label="Fermer">×</button>' + html; return; }
-  ouvrirPop({ c: 'var(--accent)', html, cls: 'plan' }, el);
+  return html;
 }
 document.getElementById('bPlan').onclick = e => { S.planJour = S.cur; ouvrirPlan(e.currentTarget); };
-document.getElementById('pop').addEventListener('click', e => {
+const clicPlan = e => {
   const b = e.target.closest('[data-plan]'); if (!b) return;
   const a = b.dataset.plan, day = S.planJour;
   if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
@@ -1776,7 +1793,10 @@ document.getElementById('pop').addEventListener('click', e => {
     const vieux = () => { t.select(); try { document.execCommand('copy'); ok(); } catch (x) { document.getElementById('planCopie').textContent = 'Sélectionné : Ctrl+C'; if (tmp) tmp.remove(); } };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(ok, vieux); else vieux();
   }
-});
+};
+document.getElementById('pop').addEventListener('click', clicPlan);
+document.getElementById('view').addEventListener('click', e => { if (CONFIG.mode === 'plan') clicPlan(e); });
+if (CONFIG.mode === 'plan') { document.body.classList.add('mode-plan'); document.title = 'Plan du jour — St-Laurent'; }
 
 function demo() {
   let seed = 7;
