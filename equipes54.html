@@ -2,7 +2,7 @@
      S'affiche tout de suite avec une copie des équipes, puis se met à jour avec l'onglet « Cycles 5-4 »
      du fichier Horaire (par le script « Horaire Wix », même lien que l'horaire).
      Montre le cycle de 9 jours en cours (aujourd'hui en bleu), avec flèches pour les cycles d'avant et d'après.
-     Hauteur conseillée de l'élément Wix : 650 px (ordinateur), 1600 px (téléphone). -->
+     Hauteur conseillée de l'élément Wix : 650 px (ordinateur), 880 px (téléphone). -->
 <!doctype html>
 <html lang="fr">
 <head>
@@ -43,20 +43,23 @@
   tfoot .tot td { font-weight: 700; color: #202124; }
   .note { padding: 10px 14px; color: var(--muted); font-size: 12.5px; }
   .etat { color: var(--muted); font-size: 12px; }
-  /* téléphone : une carte par jour */
-  .jours { display: none; }
+  .tel { display: none; }
+  /* téléphone : la même grille, resserrée pour tenir dans l'écran (une initiale par ligne dans chaque case) */
   @media (max-width: 640px) {
     body { padding: 0; }
-    table { display: none; }
-    .jours { display: block; }
-    .jour { padding: 10px 14px; border-bottom: 1px solid #eef0f2; }
-    .jour.auj { box-shadow: inset 4px 0 0 var(--accent); background: #f6f9fe; }
-    .jour h2 { font-size: 14px; font-weight: 500; margin: 0 0 6px; color: #202124; }
-    .jour h2 span { color: var(--muted); font-weight: 400; }
-    .ligne { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
-    .ligne .n { width: 70px; flex: none; color: var(--muted); font-size: 12.5px; }
-    .ligne .c, .ligne .s { display: inline; }
-    .ligne .s { margin-left: 6px; }
+    .barre { padding: 10px 10px; }
+    th, td { padding: 4px 1px; }
+    th.eq { width: 26px; padding-left: 0; text-align: center; }
+    thead th { font-size: 10.5px; }
+    thead th b { font-size: 12px; }
+    .lg { display: none; }
+    .jn { display: block; }
+    td .c { display: block; margin: 1px 0; font-size: 12px; letter-spacing: 0; }
+    td .s { font-size: 11px; padding: 0 3px; margin-top: 1px; }
+    tfoot td, tfoot th { font-size: 11.5px; }
+    tfoot .ps { display: block; font-size: 10.5px; }
+    .tel { display: inline; }
+    .note { padding: 8px 10px; }
   }
 </style>
 </head>
@@ -72,7 +75,6 @@
     <div class="periode" id="periode"></div>
   </div>
   <table id="table"></table>
-  <div class="jours" id="jours"></div>
   <div class="note" id="note"></div>
 </div>
 <script>
@@ -128,32 +130,22 @@ function afficher() {
     `Cycle du ${fmt(jours[0], { day: 'numeric', month: 'long' })} au ${fmt(jours[8], { day: 'numeric', month: 'long', year: 'numeric' })}`;
 
   // ---- desktop: teams × days
-  let h = '<thead><tr><th class="eq">Équipe</th>' + jours.map((d, i) =>
-    `<th class="${d === today ? 'auj' : ''}"><b>Jour ${i + 1}</b>${fmt(d, { weekday: 'short', day: 'numeric' })}</th>`).join('') + '</tr></thead><tbody>';
+  let h = '<thead><tr><th class="eq"><span class="lg">Équipe</span><span class="tel">Éq.</span></th>' + jours.map((d, i) =>
+    `<th class="${d === today ? 'auj' : ''}"><b><span class="lg">Jour </span><span class="tel">J</span>${i + 1}</b>` +
+    `${fmt(d, { weekday: 'short' })} <span class="jn">${fmt(d, { day: 'numeric' })}</span></th>`).join('') + '</tr></thead><tbody>';
   for (let k = 1; k <= 9; k++) {
-    h += `<tr><th class="eq">Équipe ${k}</th>` + jours.map((d, i) => {
+    h += `<tr><th class="eq"><span class="lg">Équipe </span>${k}</th>` + jours.map((d, i) => {
       const e = eq(k, d);
       const on = travaille(k, i + 1), cls = [on ? 'on' : '', on && !travaille(k, i) ? 'debut' : '', d === today ? 'auj' : ''].join(' ');
       return `<td class="${cls}">` + (on ? e.c.map(x => `<span class="c">${x}</span>`).join('') +
-        e.s.map(x => `<span class="s">${x} (S)</span>`).join('') : '') + '</td>';
+        e.s.map(x => `<span class="s">${x}<span class="lg"> (S)</span></span>`).join('') : '') + '</td>';
     }).join('') + '</tr>';
   }
   const compte = i => { let c = 0, s = 0; for (let k = 1; k <= 9; k++) if (travaille(k, i + 1)) { const e = eq(k, jours[i]); c += e.c.length; s += e.s.length; } return [c, s]; };
-  h += '</tbody><tfoot><tr><th class="eq">Contr. + sup.</th>' + jours.map((d, i) => { const [c, s] = compte(i); return `<td class="${d === today ? 'auj' : ''}">${c} + ${s}</td>`; }).join('') +
-       '</tr><tr class="tot"><th class="eq">Total</th>' + jours.map((d, i) => { const [c, s] = compte(i); return `<td class="${d === today ? 'auj' : ''}">${c + s}</td>`; }).join('') + '</tr></tfoot>';
+  h += '</tbody><tfoot><tr><th class="eq"><span class="lg">Contr. + sup.</span><span class="tel">C+S</span></th>' + jours.map((d, i) => { const [c, s] = compte(i);
+         return `<td class="${d === today ? 'auj' : ''}">${c}<span class="ps"> + ${s}</span></td>`; }).join('') +
+       '</tr><tr class="tot"><th class="eq"><span class="lg">Total</span><span class="tel">Tot.</span></th>' + jours.map((d, i) => { const [c, s] = compte(i); return `<td class="${d === today ? 'auj' : ''}">${c + s}</td>`; }).join('') + '</tr></tfoot>';
   document.getElementById('table').innerHTML = h;
-
-  // ---- phone: one card per day, teams working that day
-  document.getElementById('jours').innerHTML = jours.map((d, i) => {
-    const [c, s] = compte(i);
-    const lignes = [...Array(9)].map((_, k) => k + 1).filter(k => travaille(k, i + 1)).map(k => {
-      const e = eq(k, d);
-      return `<div class="ligne"><span class="n">Équipe ${k}</span><span>${e.c.map(x => `<span class="c">${x}</span>`).join(' ')}` +
-        e.s.map(x => `<span class="s">${x} (S)</span>`).join('') + '</span></div>';
-    }).join('');
-    return `<div class="jour ${d === today ? 'auj' : ''}"><h2>Jour ${i + 1} · ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}` +
-      `${d === today ? " <span>(aujourd'hui)</span>" : ''} <span>· ${c} + ${s}</span></h2>${lignes}</div>`;
-  }).join('');
 
   const jl = d => fmt(d, { day: 'numeric', month: 'long' });
   const cg = DATA.conges || [];
@@ -163,6 +155,7 @@ function afficher() {
     .map(([w, a, b]) => `${w} (${b ? `du ${jl(a)} au ${jl(b)}` : `dès le ${jl(a)}`})`);
   document.getElementById('note').innerHTML = (prol.length ? `En congé (non compté) : ${prol.join(', ')}. ` : '') +
     (avenir.length ? `Congé à venir (compté jusque-là) : ${avenir.join(', ')}. ` : '') +
+    '<span class="tel">En rouge : superviseur. </span>' +
     `<span class="etat">${live ? 'Mis à jour : ' + DATA.at : 'Chargement de la version à jour…'}</span>`;
 }
 
