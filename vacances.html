@@ -161,6 +161,12 @@
     .grille { max-height: none; margin: 8px 8px 0; } .tour, .dem, .leg, .mois { margin-left: 8px; margin-right: 8px; }
     .g0, .g3 { display: none; } .g1 { left: 0; } .g2 { left: 40px; } .g4 { left: 78px; }   /* narrow: Ini., Pris, Ovlp. only */
   }
+  /* « » in the top-left corner: fold the frozen columns down to Ini. only (remembered on the device) */
+  .grille.replie .g0, .grille.replie .g2, .grille.replie .g3, .grille.replie .g4 { display: none; }
+  .grille.replie .g1 { left: 0; border-right: 1px solid #bdc1c6; }
+  button.plier { border: 1px solid var(--line); background: #fff; color: var(--accent); border-radius: 9px; font-family: inherit; font-weight: 600; font-size: 12px; line-height: 14px;
+                 padding: 0 6px; cursor: pointer; }
+  button.plier:hover { background: #e8f0fe; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -211,7 +217,8 @@ const mem = {
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('regle-d')) mem.set('regle', e.target.open ? '1' : ''); }, true);
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
-const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false };
+const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false,
+  replie: mem.get('replie') ? mem.get('replie') === '1' : innerWidth <= 600 };   // frozen columns folded to Ini. only
 // personal code (4 digits from UK), required to send anything; kept on this device if « retenir » is ticked
 S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeRet = true; S.codeSaisie = '';
 S.msgDem = ['', '']; S.msgEch = ['', ''];           // last result shown under the buttons (kept when the grid reloads)
@@ -304,12 +311,14 @@ function afficherTour() {
     `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne</span></div>`;
 }
 
+const boutonPlier = () => `<button class="plier" data-plier title="${S.replie ? 'Afficher Ordre, Pris, Solde et Ovlp.' : 'Masquer Ordre, Pris, Solde et Ovlp. (garder les initiales)'}" ` +
+  `aria-label="${S.replie ? 'Afficher les colonnes' : 'Masquer les colonnes'}">${S.replie ? '»' : '«'}</button>`;
 function afficherGrille() {
   const d = S.d, g = grp(), mm = moiDe();
   const fer = new Map((d.feries || []).map(([x, n]) => [x, n]));
   const rel = k => (d.relache || []).find(([a, b]) => dateDe(k) >= a && dateDe(k) <= b);
   const vide = '<th class="g g0"></th><th class="g g1"></th><th class="g g2"></th><th class="g g3"></th><th class="g g4"></th>';
-  let m = '<tr class="m">' + vide;
+  let m = '<tr class="m">' + vide.replace('<th class="g g1"></th>', `<th class="g g1">${boutonPlier()}</th>`);
   let n = '<tr class="n"><th class="g g0">Ordre</th><th class="g g1">Ini.</th><th class="g g2" title="Jours de vacances pris">Pris</th>' +
     '<th class="g g3" title="Jours qu\'il reste (crédits − pris)">Solde</th><th class="g g4" title="Overlaps restants">Ovlp.</th>';
   let w = '<tr class="w">' + vide;
@@ -367,6 +376,7 @@ function afficherGrille() {
     ligne('ovl', 'Ovlp.', 'Overlap utilisé par', k => { const v = g.ovlpPar[k] || '';
       return `<td class="j${v ? ' crb' : ''}${mdeb(k)}"${v ? ` title="${v === 'TROP' ? 'Trop de monde ce jour-là' : 'Overlap utilisé par ' + esc(v)}"` : ''}>${esc(v === 'TROP' ? '!' : v)}</td>`; });
   const el = document.getElementById('grille'), sx = el.scrollLeft, sy = el.scrollTop;
+  el.classList.toggle('replie', S.replie);
   el.innerHTML = `<table><thead>${m}</tr>${n}</tr>${w}</tr></thead><tbody>${rangees}${sep}${bas}</tbody></table>`;
   el.scrollLeft = sx; el.scrollTop = sy;
 }
@@ -595,6 +605,8 @@ document.addEventListener('click', e => {
   const t = e.target;
   const g = t.closest('[data-g]');
   if (g) { S.g = +g.dataset.g; afficher(); return; }
+  if (t.closest('[data-plier]')) { S.replie = !S.replie; mem.set('replie', S.replie ? '1' : '0');
+    const el = document.getElementById('grille'); el.classList.toggle('replie', S.replie); t.closest('[data-plier]').outerHTML = boutonPlier(); return; }
   const mo = t.closest('[data-mois]');
   if (mo) { const c = document.getElementById('m' + mo.dataset.mois), el = document.getElementById('grille');
     // measured on screen: the sticky columns' offsetLeft moves with the scroll, so it can't be used
