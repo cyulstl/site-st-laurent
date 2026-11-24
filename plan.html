@@ -1517,6 +1517,8 @@ function planJour(gens, cfg) {
 // « (XV) » = optionnel, selon le trafic sur le moment.
 // Jamais plus de 1 h 30 assis d'affilée (2 h : jamais), et 1 h 30 seulement si rien d'autre ne marche ; s'il manque
 // quelqu'un, on prend une personne qui a eu au moins 30 min de pause, sinon il y a une position de moins (« court »).
+// Pas de longues pauses non plus : quelqu'un qui resterait plus de 1 h 30 sans s'asseoir (entre deux tours, en arrivant
+// ou avant de partir) s'assoit tout de suite — une position de plus, jusqu'à 5 ; s'il est de l'autre côté, il change de côté.
 // La nuit, les nuits qui entrent tôt et le superviseur pour le minimum : mêmes règles que moteur.js.
 const COTES = Object.assign({}, PLAN, {
   grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
@@ -1530,6 +1532,7 @@ const COTES = Object.assign({}, PLAN, {
   voulu: [[0, 1], [345, 2], [420, 3], [720, 4], [1140, 3], [1335, 1]],
   supJusqua: 3,
   maxAssis: 90,            // never more than 1 h 30 in a row (2 h: never); 1 h 30 only if nothing else works            // a supervisor tops up the positions only up to 3 (never 2 positions when 3 are wanted)
+  maxPause: 90,            // no long breaks either: someone who would rest more than 1 h 30 sits now (an extra position, up to 5)
 });
 
 function planCotes(gens, cfg) {
@@ -1636,6 +1639,23 @@ function planCotes(gens, cfg) {
     const supsLibres = () => sups.filter(s => !qui.includes(s) && dispoDe(s, t, b) != null && dispoDe(s, t, b) - t >= C.minSit && peut(s, t, dispoDe(s, t, b)))
       .sort((u, v) => longue(u, t, dispoDe(u, t, b)) - longue(v, t, dispoDe(v, t, b)) || repos(v, t) - repos(u, t));
     while (qui.length + nn < minPos(t)) { const x = supsLibres()[0]; if (!x) break; qui.push(x); }
+    // no long breaks: whoever would otherwise rest more than maxPause sits now — the longest wait first, an extra
+    // position up to maxPos; from the other side, they switch sides (a flip) so they keep alternating
+    // (their wait: from their last sit, or their arrival, to their next turn on their side — or to when they stop
+    // sitting, if their side has no turn left for them)
+    const attente = p => {
+      const depuis = dernier.has(p) ? dernier.get(p) : p.s;
+      const g = C.grille.find(([x, y, c]) => c === cote.get(p) && x >= b && dispoDe(p, x, y) != null && dispoDe(p, x, y) - x >= C.minSit);
+      return (g ? g[0] : finDe(p)) - depuis;
+    };
+    // (not now if the very next slot still comes soon enough for them: they sit there instead, as late as the limit allows)
+    const plusTard = p => { const depuis = dernier.has(p) ? dernier.get(p) : p.s;
+      return suivant && suivant[0] - depuis <= C.maxPause && dispoDe(p, suivant[0], suivant[1]) != null && dispoDe(p, suivant[0], suivant[1]) - suivant[0] >= C.minSit; };
+    jour.filter(p => !qui.includes(p) && cote.has(p) && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit &&
+        repos(p, t) >= C.reposFlip && peut(p, t, dispoDe(p, t, b)) && !(a === 1260 && closerDe(p) && tranches.length) &&
+        attente(p) > C.maxPause && !plusTard(p))
+      .sort((x, y) => attente(y) - attente(x) || tri(x, y))
+      .forEach(p => { if (qui.length + nn < C.maxPos) { qui.push(p); cote.set(p, k); } });
     // a supervisor completes the wanted number when the staff alone can't — optional, in brackets
     const option = new Set();
     if (qui.length + nn < Math.min(voulu, C.supJusqua)) {
@@ -1800,7 +1820,8 @@ function htmlDuPlan(day) {
     `Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.` +
     (S.planMoteur === 'cotes' ? ` <b>Version 2</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
       `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position. ` +
-      `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
+      `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. ` +
+      `Pas de longues pauses : quelqu'un qui resterait plus de 1 h 30 sans s'asseoir s'assoit (une position de plus, jusqu'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
   return html;
 }
 // (the calendar no longer has a « Plan du jour » button: the plan has its own page, plan.html)
