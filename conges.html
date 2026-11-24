@@ -49,6 +49,7 @@
   .ldt { position: relative; margin: 6px 0 4px; }
   .ldt .mois { position: relative; height: 18px; margin-left: 52px; border-bottom: 1px solid var(--line); }
   .ldt .mois span { position: absolute; top: 0; font-size: 10.5px; color: var(--muted); transform: translateX(2px); white-space: nowrap; }
+  .ldt .mois span.an { color: #3c4043; }
   .ldt .rang { position: relative; height: 22px; display: flex; align-items: center; }
   .ldt .rang b { width: 52px; flex: none; font-size: 12px; color: #202124; }
   .ldt .piste { position: relative; flex: 1; height: 100%; }
@@ -192,15 +193,24 @@ function ligneDuTemps(L) {
   const vis = L.filter(c => (!c.fin || c.fin >= t0) && (!c.debut || c.debut < t1));
   if (!vis.length) return '';
   let tete = '', grille = '';
-  const etroit = innerWidth < 760, premJanv = (12 - n.getMonth()) % 12;     // months until the next January
+  // month labels: sized to the real width so they never overlap — years first (each January), then the first
+  // month, then every 1, 2, 3 or 6 months, whichever leaves room; a label that would touch another is dropped
+  const box = document.getElementById('liste'), cs = getComputedStyle(box);
+  const W = Math.max(150, (box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 52) || 600);
+  const pxM = W / mois, pas = [1, 2, 3, 6].find(s => s * pxM >= 40) || 12;
+  const ctx = document.createElement('canvas').getContext('2d'); ctx.font = '10.5px Roboto, "Segoe UI", Arial, sans-serif';
+  const larg = t => ctx.measureText(t).width + 2, pris = [];
+  const libre = (px, t) => px + larg(t) <= W + 2 && pris.every(([a, b]) => px + larg(t) + 8 <= a || px >= b + 8);
+  const poser = (k, t) => { const x = pos(ymd(moisK(k))), px = x / 100 * W; if (!libre(px, t)) return false; pris.push([px, px + larg(t)]);
+    tete += `<span style="left:${x}%"${/^\d{4}$/.test(t) ? ' class="an"' : ''}>${t}</span>`; return true; };
+  const moisK = k => new Date(Date.UTC(n.getFullYear(), n.getMonth() + k, 1));
+  const court = k => fmt(ymd(moisK(k)), { month: 'short' }), long = k => fmt(ymd(moisK(k)), { month: 'short', year: 'numeric' });
+  for (let k = 0; k < mois; k++) if (moisK(k).getUTCMonth() === 0)
+    pas === 1 && pxM >= larg(long(k)) + 10 ? poser(k, long(k)) : poser(k, String(moisK(k).getUTCFullYear()));
+  if (moisK(0).getUTCMonth() !== 0) poser(0, long(0)) || poser(0, court(0));
+  for (let k = 1; k < mois; k++) { const m = moisK(k).getUTCMonth(); if (m && m % pas === 0) poser(k, court(k)); }
   for (let k = 0; k < mois; k++) {
-    const dt = new Date(Date.UTC(n.getFullYear(), n.getMonth() + k, 1)), d = ymd(dt), x = pos(d), an = dt.getUTCMonth() === 0;
-    if (etroit) {                                      // phone: years only (and the first month if January is far)
-      if (an) tete += `<span style="left:${x}%">${dt.getUTCFullYear()}</span>`;
-      else if (k === 0 && premJanv >= 4) tete += `<span style="left:${x}%">${fmt(d, { month: 'short' })}</span>`;
-    } else if (k % (mois > 30 ? 3 : 2) === 0 || an) {
-      tete += `<span style="left:${x}%">${an || k === 0 ? fmt(d, { month: 'short', year: 'numeric' }) : fmt(d, { month: 'short' })}</span>`;
-    }
+    const dt = moisK(k), x = pos(ymd(dt)), an = dt.getUTCMonth() === 0;
     grille += `<i class="${an ? 'an' : ''}" style="left:${x}%"></i>`;
   }
   grille += `<i class="auj" style="left:${pos(AUJ)}%"></i>`;
@@ -216,6 +226,10 @@ function ligneDuTemps(L) {
 /* ---------- form ---------- */
 const msg = (cls, t) => { const m = document.getElementById('msg'); m.className = 'msg ' + cls; m.innerHTML = t; m.hidden = !t; };
 document.getElementById('ini').onchange = e => { S.moi = e.target.value; mem.set('moi', S.moi); afficher(); };
+// the timeline's month labels depend on the width: redraw when it changes
+let largListe = 0, tLarg = 0;
+addEventListener('resize', () => { clearTimeout(tLarg); tLarg = setTimeout(() => {
+  const w = document.getElementById('liste').clientWidth; if (w !== largListe) { largListe = w; afficher(); } }, 150); });
 document.getElementById('debut').onchange = e => { const f = document.getElementById('fin'); f.min = e.target.value; };
 document.getElementById('f').addEventListener('submit', e => {
   e.preventDefault();
