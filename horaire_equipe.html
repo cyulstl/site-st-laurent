@@ -234,6 +234,27 @@
   .plan-mot { display: flex; gap: 4px; margin: 0 0 8px; }
   .plan-mot button { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 14px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
   .plan-mot button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .plan-vues { display: flex; gap: 2px; margin: 0 0 8px; border-bottom: 1px solid var(--line); }
+  .plan-vues button { border: 0; background: none; color: var(--muted); padding: 6px 10px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .plan-vues button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .plan-pos { display: grid; gap: 3px; font-size: 13px; }
+  .plan-pos .h { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); align-self: center; }
+  .plan-pos .h.court { color: var(--partiel); }
+  .plan-pos .q { display: flex; align-items: center; justify-content: center; min-height: 22px; border-radius: 5px; background: #e8f0fe;
+                 color: #174ea6; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
+  .plan-pos .q.opt { background: none; border: 1px dashed #8ab4f8; color: var(--muted); font-weight: 400; }
+  .plan-pos .q.moi, .plan-pers .b.moi { background: var(--accent); color: #fff; }
+  .plan-pos .q.opt.moi { border-color: var(--accent); background: #e8f0fe; color: #174ea6; }
+  .plan-pers { overflow-x: auto; font-size: 11px; padding-bottom: 4px; }
+  .plan-pers .ligne { position: relative; height: 22px; }
+  .plan-pers .ech { position: relative; height: 16px; color: var(--muted); }
+  .plan-pers .ech span { position: absolute; top: 0; transform: translateX(-50%); }
+  .plan-pers .nom { position: sticky; left: 0; z-index: 1; display: inline-block; width: 30px; height: 22px; line-height: 22px; background: var(--bg);
+                    font-size: 12px; font-weight: 500; cursor: pointer; }
+  .plan-pers .b { position: absolute; top: 3px; height: 16px; line-height: 16px; border-radius: 4px; background: #c6dafc; color: #174ea6;
+                  text-align: center; overflow: hidden; white-space: nowrap; font-weight: 500; cursor: pointer; }
+  .plan-pers .b.opt { background: none; border: 1px dashed #8ab4f8; box-sizing: border-box; line-height: 14px; color: var(--muted); }
+  .plan-pers .grille { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--soft); }
   .plan-act { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
   .plan-act button { border: 0; background: var(--accent); color: #fff; border-radius: 16px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
   .plan-act span { font-size: 12px; color: var(--ok, #188038); }
@@ -1637,10 +1658,74 @@ function gensPlan(day) {
   return { pris: pris.sort((x, y) => x.s - y.s || (x.i < y.i ? -1 : 1)), hors };
 }
 S.planJour = null; S.planSans = {};
+S.planVue = (() => { try { return localStorage.getItem('planVue') || 'pos'; } catch (x) { return 'pos'; } })();
+S.planMoi = null;
 S.planMoteur = (() => { try { return localStorage.getItem('planMoteur') === 'cotes' ? 'cotes' : 'actuel'; } catch (x) { return 'actuel'; } })();
-function texteDuPlan(day) {
+// the plan's lines for a day, with the chosen engine and without the people unticked
+function lignesDuPlan(day) {
   const { pris } = gensPlan(day), sans = S.planSans[day] || [];
-  const lignes = (S.planMoteur === 'cotes' ? planCotes : planJour)(pris.filter(p => !sans.includes(p.i)));
+  return (S.planMoteur === 'cotes' ? planCotes : planJour)(pris.filter(p => !sans.includes(p.i)));
+}
+// 'DW' | 'XV (S)' | '(XV)' → { i, opt }
+const nomPlan = s => ({ i: s.replace(/^\(|\)$/g, '').replace(/ \(S\)$/, ''), opt: /^\(/.test(s), sup: / \(S\)$/.test(s) });
+// Positions: one column per position; a person keeps their column while seated, so a sit that goes on over several
+// lines is one tall box (07:00 DW YM, 07:30 + IF: DW and YM are not written again)
+function vuePositions(lignes) {
+  if (!lignes.length) return '<div class="plan-aide">Personne à l\'horaire.</div>';
+  const L = Math.max(1, ...lignes.map(l => l[1].length)), blocs = [];
+  let avant = Array(L).fill(null);
+  lignes.forEach(([t, qui], r) => {
+    const noms = qui.map(nomPlan), lanes = Array(L).fill(null);
+    avant.forEach((x, j) => { const n = x && noms.find(y => y.i === x.n.i && y.opt === x.n.opt); if (n) { lanes[j] = { n, b: x.b }; x.b.fin = r + 1; } });
+    noms.filter(n => !lanes.some(x => x && x.n === n)).forEach(n => {
+      const j = lanes.findIndex(x => !x); const b = { n, j, debut: r, fin: r + 1 }; blocs.push(b); lanes[j] = { n, b };
+    });
+    avant = lanes;
+  });
+  let h = `<div class="plan-pos" style="grid-template-columns:44px repeat(${L},minmax(0,1fr))">`;
+  lignes.forEach(([t, , note], r) => { h += `<div class="h${note ? ' court' : ''}" style="grid-row:${r + 1}"${note ? ' title="1 position seulement"' : ''}>${hhmmP(t).replace(/(..)(..)/, '$1:$2')}</div>`; });
+  blocs.forEach(b => {
+    const moi = S.planMoi === b.n.i ? ' moi' : '';
+    h += `<div class="q${b.n.opt ? ' opt' : ''}${moi}" data-plan="moi" data-i="${esc(b.n.i)}" style="grid-column:${b.j + 2};grid-row:${b.debut + 1}/${b.fin + 1}"` +
+      `${b.n.opt ? ' title="Optionnel : selon le trafic"' : ''}>${esc(b.n.i)}${b.n.sup ? ' (S)' : ''}</div>`;
+  });
+  return h + '</div>';
+}
+// Par personne: one row per person, their sits as bars on the day's timeline, initials written on each bar
+function vuePersonnes(lignes) {
+  if (!lignes.length) return '<div class="plan-aide">Personne à l\'horaire.</div>';
+  const t0 = lignes[0][0], t1 = Math.max(lignes[lignes.length - 1][0] + 60, t0 + 1440), px = 0.75;   // 45 px per hour
+  const W = Math.round((t1 - t0) * px), x = t => Math.round((t - t0) * px);
+  const gens = new Map();
+  lignes.forEach(([t, qui], r) => {
+    const fin = r + 1 < lignes.length ? lignes[r + 1][0] : t1;
+    qui.map(nomPlan).forEach(n => {
+      if (!gens.has(n.i)) gens.set(n.i, []);
+      const segs = gens.get(n.i), d = segs[segs.length - 1];
+      if (d && d.b === t && d.opt === n.opt) d.b = fin; else segs.push({ a: t, b: fin, opt: n.opt });
+    });
+  });
+  let ech = '', grille = '';
+  for (let t = Math.ceil(t0 / 60) * 60; t < t1; t += 60) {
+    if (((t / 60) % 2) === 0) ech += `<span style="left:${30 + x(t)}px">${pad((t / 60) % 24)}</span>`;
+    grille += `<div class="grille" style="left:${30 + x(t)}px"></div>`;
+  }
+  let h = `<div class="plan-pers"><div style="position:relative;width:${W + 34}px">${grille}<div class="ech">${ech}</div>`;
+  gens.forEach((segs, i) => {
+    const moi = S.planMoi === i ? ' moi' : '';
+    h += `<div class="ligne"><span class="nom" data-plan="moi" data-i="${esc(i)}">${esc(i)}</span>` + segs.map(sg =>
+      `<div class="b${sg.opt ? ' opt' : ''}${moi}" data-plan="moi" data-i="${esc(i)}" style="left:${30 + x(sg.a)}px;width:${Math.max(x(sg.b) - x(sg.a) - 1, 4)}px"` +
+      ` title="${esc(i)} ${hhmmP(sg.a).replace(/(..)(..)/, '$1:$2')}-${hhmmP(sg.b).replace(/(..)(..)/, '$1:$2')}${sg.opt ? ' (optionnel)' : ''}">${x(sg.b) - x(sg.a) >= 18 ? esc(i) : ''}</div>`).join('') + '</div>';
+  });
+  return h + '</div></div>';
+}
+function vueDuPlan(day) {
+  if (S.planVue === 'txt') return `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>`;
+  const l = lignesDuPlan(day);
+  return S.planVue === 'pers' ? vuePersonnes(l) : vuePositions(l);
+}
+function texteDuPlan(day) {
+  const lignes = lignesDuPlan(day);
   return `Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
     (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
 }
@@ -1655,14 +1740,16 @@ function ouvrirPlan(el) {
     `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
     `<div class="plan-mot">${[['actuel', 'Actuel'], ['cotes', 'Côtés (essai)']].map(([v, n]) =>
       `<button data-plan="mot" data-v="${v}"${S.planMoteur === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
-    `<textarea class="plan-txt" id="planTxt" spellcheck="false">${esc(texteDuPlan(day))}</textarea>` +
+    `<div class="plan-vues">${[['pos', 'Positions'], ['pers', 'Par personne'], ['txt', 'Texte']].map(([v, n]) =>
+      `<button data-plan="vue" data-v="${v}"${S.planVue === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
+    `<div id="planVue">${vueDuPlan(day)}</div>` +
     `<div class="plan-act"><button data-plan="copier">Copier</button><span id="planCopie"></span></div>` +
     `<div class="plan-gens">${pris.map(p => `<label><input type="checkbox" data-plan="qui" value="${esc(p.i)}"${sans.includes(p.i) ? '' : ' checked'}> ${esc(p.i)} ` +
       `${p.sup ? '(S) ' : ''}<span class="hr">${p.ot ? '$' : ''}${hm(p.a)}</span></label>`).join('')}</div>` +
     (hors.length ? `<div class="plan-hors">Pas comptés : ${hors.map(([w, r]) => `${esc(w)} (${esc(r)})`).join(', ')}</div>` : '') +
     `<div class="plan-aide">${nb} personne${nb > 1 ? 's' : ''} comptée${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Superviseurs (S) : assis seulement s'il le faut pour garder le minimum de positions. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
     `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
-    `Le texte se modifie avant de copier.` +
+    `Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.` +
     (S.planMoteur === 'cotes' ? ` <b>Côtés (essai)</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
       `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position. ` +
       `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
@@ -1675,13 +1762,18 @@ document.getElementById('pop').addEventListener('click', e => {
   const b = e.target.closest('[data-plan]'); if (!b) return;
   const a = b.dataset.plan, day = S.planJour;
   if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
+  else if (a === 'vue') { S.planVue = b.dataset.v; try { localStorage.setItem('planVue', S.planVue); } catch (x) { /* not kept */ } ouvrirPlan(); }
+  else if (a === 'moi') { S.planMoi = S.planMoi === b.dataset.i ? null : b.dataset.i; document.getElementById('planVue').innerHTML = vueDuPlan(day); }
   else if (a === 'mot') { S.planMoteur = b.dataset.v; try { localStorage.setItem('planMoteur', S.planMoteur); } catch (x) { /* not kept */ } ouvrirPlan(); }
   else if (a === 'qui') {
     const l = new Set(S.planSans[day] || []); if (b.checked) l.delete(b.value); else l.add(b.value);
-    S.planSans[day] = [...l]; document.getElementById('planTxt').value = texteDuPlan(day);
+    S.planSans[day] = [...l]; document.getElementById('planVue').innerHTML = vueDuPlan(day);
   } else if (a === 'copier') {
-    const t = document.getElementById('planTxt'), ok = () => { document.getElementById('planCopie').textContent = 'Copié ✓'; };
-    const vieux = () => { t.select(); try { document.execCommand('copy'); ok(); } catch (x) { document.getElementById('planCopie').textContent = 'Sélectionné : Ctrl+C'; } };
+    // the text tab's text (edited or not); from the other tabs, the plan's text
+    let t = document.getElementById('planTxt'), tmp = null;
+    if (!t) { tmp = t = document.createElement('textarea'); t.value = texteDuPlan(day); t.style.cssText = 'position:absolute;left:-9999px'; document.body.appendChild(t); }
+    const ok = () => { document.getElementById('planCopie').textContent = 'Copié ✓'; if (tmp) tmp.remove(); };
+    const vieux = () => { t.select(); try { document.execCommand('copy'); ok(); } catch (x) { document.getElementById('planCopie').textContent = 'Sélectionné : Ctrl+C'; if (tmp) tmp.remove(); } };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(ok, vieux); else vieux();
   }
 });
