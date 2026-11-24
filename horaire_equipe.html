@@ -1333,7 +1333,8 @@ const PLAN = Object.assign({
   nuitTot: 1680,           // a shift that starts earlier but ends after 04:00 the next morning is a night too (early
                            // arrival, e.g. 18:30-06:30): evening sits until the night starts, then the night's last turn
   debutNuit: 1335,         // when the night position starts if nobody starts a night shift (22:15)
-  finAvantFen: 30,         // stop sitting this long before leaving the floor during the shift (leave, training…)
+  finAvantFen: 30,
+  maxAssis: 90,            // never more than 1 h 30 in a row (2 h: never); if nobody else, one position fewer         // stop sitting this long before leaving the floor during the shift (leave, training…)
 }, CONFIG.plan || {});
 
 function planJour(gens, cfg) {
@@ -1410,7 +1411,7 @@ function planJour(gens, cfg) {
     const asseoir = p => { const o = st.get(p); st.set(p, { on: true, depuis: t, neuf: false, serie: o.leveA === t && o.serie != null ? o.serie : t }); };
     const serie = p => t - (st.get(p).serie != null ? st.get(p).serie : t);
     const plusLong = () => on().sort((a, b) => (b.sup ? 1 : 0) - (a.sup ? 1 : 0) || assis(b) - assis(a));
-    if (!besoinSup) sups.forEach(p => { if (st.get(p).on && (heure || !bloc(p))) st.set(p, { on: false, depuis: t }); });
+    if (!besoinSup) sups.forEach(p => { if (st.get(p).on && (!bloc(p) || (heure && !st.get(p).releve))) st.set(p, { on: false, depuis: t }); });
     const n = dispo.length, nn = t < finJour ? nuitAssis(t).length : 0, mini = Math.max(0, minPos(t) - nn);
     // R1 (and at the start of the night: the evening sitters who leave within the hour get up, the night takes over)
     const debutTranche = tranches.length && t === tranches[0][1];
@@ -1435,18 +1436,24 @@ function planJour(gens, cfg) {
       const leves = plusLong().filter(x => (assis(x) >= C.sieste - 15 || reste(x) < C.minSit) &&
         !(t === heureFerm && reste(x) <= C.pas && assis(x) <= C.sieste));
       leves.forEach(lever);
+      // someone who would reach 1 h 30 by the next hour (sat since the half hour) gets up too, if someone rested
+      // can take the seat (13:30-14:00, then off: like the real plans)
+      const reposes = debout().filter(x => !leves.includes(x) && repos(x) >= C.sieste - 15 && !(closer(x) && t === heureFerm - 60));
+      plusLong().filter(x => !x.sup && serie(x) + C.sieste >= C.maxAssis && !(t === heureFerm && reste(x) <= C.pas))
+        .slice(0, reposes.length).forEach(x => { lever(x); leves.push(x); });
       // the closer takes a seat for the last stretch (22:00 → about 23:00, with the night from 22:15)
       // (one closer: the most rested, as an extra seat; none if one is already on)
-      if (t === heureFerm && !on().some(closer)) dispo.filter(x => closer(x) && !st.get(x).on && reste(x) >= C.minSit)
+      if (t === heureFerm && !on().some(closer)) dispo.filter(x => closer(x) && !st.get(x).on && reste(x) >= C.minSit && !leves.includes(x) && repos(x) >= 30)
         .sort((a, b) => repos(b) - repos(a)).slice(0, 1).forEach(x => { asseoir(x); Pt = Math.max(Pt, on().length); });
       while (on().length > Pt) lever(plusLong()[0]);
       const tot = p => assisTot.get(p) || 0;
+      // (if nobody has rested 45 min: someone who has had 30 min — short-staffed breaks — never someone who just
+      // sat: no 2 h sits; with nobody at all, one position fewer)
       while (on().length < Pt) {
-        const c = debout().find(x => !leves.includes(x) && !court45(x) && repos(x) >= Math.min(pause, C.sieste - 15))
-          || debout().find(x => !leves.includes(x) && repos(x) >= Math.min(pause, C.sieste - 15))
-          || leves.filter(x => !st.get(x).on && bloc(x))                                     // keeps sitting: a controller
-               .sort((a, b) => (serie(a) >= 2 * C.sieste ? 1 : 0) - (serie(b) >= 2 * C.sieste ? 1 : 0)   // never a 3rd hour if avoidable,
-                 || (a.sup ? 1 : 0) - (b.sup ? 1 : 0) || serie(a) - serie(b) || tot(a) - tot(b))[0];          // then a controller, shortest sit
+        const libre = x => !leves.includes(x) && !(closer(x) && t === heureFerm - 60 && on().length >= mini);
+        const c = debout().find(x => libre(x) && !court45(x) && repos(x) >= Math.min(pause, C.sieste - 15))
+          || debout().find(x => libre(x) && repos(x) >= Math.min(pause, C.sieste - 15))
+          || debout().find(x => libre(x) && repos(x) >= 30);
         if (!c) break; asseoir(c);
       }
     } else if (court) {
@@ -1454,8 +1461,22 @@ function planJour(gens, cfg) {
         const p = plusLong()[0]; if (!p || assis(p) < C.sieste) break; lever(p); asseoir(c);
       }
     }
+    // the cap: anyone who has sat 1 h 30 gets up, replaced by the most rested who has had 30 min or more
+    // (no controller free: a supervisor takes the seat until the next hour — supervisors sit when needed)
+    on().filter(p => serie(p) >= C.maxAssis).forEach(p => {
+      const c = debout().find(x => x !== p && repos(x) >= 30) ||
+        sups.filter(x => x !== p && bloc(x) && !st.get(x).on && repos(x) >= 30).sort((a, b) => repos(b) - repos(a))[0];
+      // nobody to take over: they get up anyway if someone else stays seated (1 position for a bit — critical — rather than 2 h)
+      if (!c) { if (on().length - 1 + nn >= 1) lever(p); return; }
+      lever(p); asseoir(c); if (c.sup && !dispo.includes(c)) st.get(c).releve = true;
+    });
     // R2 (and the hour's new positions); never nobody while someone is here (even with less than 30 min left)
-    while (on().length < Pt && (heure || t === t0 || on().length < mini || !on().length)) { const c = debout()[0]; if (!c) break; asseoir(c); }
+    // (someone who just got up sits again only for the minimum, and only for a short while: 1 h 30 at most)
+    // (the closer stays free the hour before his stretch, unless needed for the minimum)
+    while (on().length < Pt && (heure || t === t0 || on().length < mini || (!on().length && !nn))) {
+      const c = debout().find(x => st.get(x).leveA !== t && !(closer(x) && t === heureFerm - 60)) ||
+        (on().length < mini || (!on().length && !nn) ? debout().find(x => serie(x) + 30 <= C.maxAssis) : null);
+      if (!c) break; asseoir(c); }
     if (!on().length && !nn && dispo.length) asseoir(dispo.slice().sort((a, b) => reste(b) - reste(a))[0]);
     // R6 the half-hour switch (13:30): someone who would have to leave at :45 gets up at :30, and their seat goes
     // to whoever can't do another full hour (their last sit: 06:15 → 13:30-14:00), otherwise to the most rested
@@ -1495,6 +1516,8 @@ function planJour(gens, cfg) {
 // le reste de l'heure (pas 1 h 30 de pause en commençant un quart, en OT surtout).
 // Un superviseur peut compléter le nombre de positions voulu quand le monde manque : il est noté entre parenthèses,
 // « (XV) » = optionnel, selon le trafic sur le moment.
+// Jamais plus de 1 h 30 assis d'affilée (2 h : jamais), et 1 h 30 seulement si rien d'autre ne marche ; s'il manque
+// quelqu'un, on prend une personne qui a eu au moins 30 min de pause, sinon il y a une position de moins (« court »).
 // La nuit, les nuits qui entrent tôt et le superviseur pour le minimum : mêmes règles que moteur.js.
 const COTES = Object.assign({}, PLAN, {
   grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
@@ -1506,7 +1529,8 @@ const COTES = Object.assign({}, PLAN, {
   // positions wanted by time of day (from the real plans): 2 at the opening, 3 from 07:00, 4 from 12:00,
   // 3 from 19:00; never more than half of those here (rounded up), never fewer than the minimum
   voulu: [[0, 1], [345, 2], [420, 3], [720, 4], [1140, 3], [1335, 1]],
-  supJusqua: 3,            // a supervisor tops up the positions only up to 3 (never 2 positions when 3 are wanted)
+  supJusqua: 3,
+  maxAssis: 90,            // never more than 1 h 30 in a row (2 h: never); 1 h 30 only if nothing else works            // a supervisor tops up the positions only up to 3 (never 2 positions when 3 are wanted)
 });
 
 function planCotes(gens, cfg) {
@@ -1569,14 +1593,19 @@ function planCotes(gens, cfg) {
   // ---- the sits, slot by slot
   const sits = [];                                    // [p, from, to, optional]
   const dernier = new Map();                          // p → end of its last sit
+  const debutRun = new Map();                         // p → start of its current run (sits back to back)
   const repos = (p, t) => t - (dernier.has(p) ? dernier.get(p) : -1e9);
+  const run = (p, a, f) => f - (dernier.get(p) === a ? debutRun.get(p) : a);      // the run's length if p sits a-f
+  const peut = (p, a, f) => run(p, a, f) <= C.maxAssis;
+  const longue = (p, a, f) => run(p, a, f) > 60 ? 1 : 0;                           // 1 h 30: only if nothing else
+  const noter = (p, a, f) => { if (dernier.get(p) !== a) debutRun.set(p, a); dernier.set(p, f); };
   const finOuverture = jour.filter(p => p.s >= 375 && p.s < 420).length;   // the 06:15s relieve one for one
   placer(t0);
   for (const [a, b, k] of C.grille) {
     if (b <= t0) continue;
     const t = Math.max(a, t0);
     placer(t);
-    let qui = jour.filter(p => cote.get(p) === k && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit);
+    let qui = jour.filter(p => cote.get(p) === k && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit && peut(p, t, dispoDe(p, t, b)));
     // the closer keeps fresh for 22:00 (not in the 21:00-22:15 slot when someone else can sit)
     if (a === 1260) qui = qui.filter(p => !closerDe(p) || qui.length === 1);
     // opening: as many as the 06:15s who will relieve them
@@ -1585,7 +1614,7 @@ function planCotes(gens, cfg) {
     // (most rested first — but a half hour, 13:00 or 13:30, goes first to those already here, not to a newcomer —
     // then those on their own side, then those who stay later: the ones leaving sooner keep the reliefs)
     const neuf = p => b - a < 60 && !dernier.has(p) ? 1 : 0;
-    qui.sort((x, y) => neuf(x) - neuf(y) || repos(y, t) - repos(x, t) || (origine.get(x) === k ? 0 : 1) - (origine.get(y) === k ? 0 : 1) ||
+    qui.sort((x, y) => longue(x, t, dispoDe(x, t, b)) - longue(y, t, dispoDe(y, t, b)) || neuf(x) - neuf(y) || repos(y, t) - repos(x, t) || (origine.get(x) === k ? 0 : 1) - (origine.get(y) === k ? 0 : 1) ||
       finDe(y) - finDe(x) || tri(x, y));
     const nn = tranches.filter(([, x, y]) => t >= x && t < y).length;
     qui = qui.slice(0, Math.max(0, C.maxPos - nn));
@@ -1601,28 +1630,29 @@ function planCotes(gens, cfg) {
     // too few: borrow from the other side — the most rested (a 30 min break or more), else someone who has sat only
     // this last hour (a 2 h sit) — and they switch sides (a flip); then a supervisor for the minimum
     const autres = () => jour.filter(p => cote.get(p) !== k && !qui.includes(p) && dispoDe(p, t, b) != null &&
-      dispoDe(p, t, b) - t >= C.minSit).sort((x, y) => repos(y, t) - repos(x, t));
-    while (qui.length < cible) {
-      const x = autres().find(p => repos(p, t) >= C.reposFlip) || autres().find(p => !sits.some(([q, , f]) => q === p && f === t && sits.some(([r, , g]) => r === p && g < t && g >= t - 60)));
-      if (!x) break; qui.push(x); cote.set(x, k);
-    }
-    while (qui.length + nn < minPos(t)) { const x = sups.find(s => !qui.includes(s) && dispoDe(s, t, b) != null); if (!x) break; qui.push(x); }
+      dispoDe(p, t, b) - t >= C.minSit && repos(p, t) >= C.reposFlip && peut(p, t, dispoDe(p, t, b)))
+      .sort((x, y) => longue(x, t, dispoDe(x, t, b)) - longue(y, t, dispoDe(y, t, b)) || repos(y, t) - repos(x, t));
+    while (qui.length < cible) { const x = autres()[0]; if (!x) break; qui.push(x); cote.set(x, k); }
+    // the minimum: a supervisor (the most rested, under the cap)
+    const supsLibres = () => sups.filter(s => !qui.includes(s) && dispoDe(s, t, b) != null && dispoDe(s, t, b) - t >= C.minSit && peut(s, t, dispoDe(s, t, b)))
+      .sort((u, v) => longue(u, t, dispoDe(u, t, b)) - longue(v, t, dispoDe(v, t, b)) || repos(v, t) - repos(u, t));
+    while (qui.length + nn < minPos(t)) { const x = supsLibres()[0]; if (!x) break; qui.push(x); }
     // a supervisor completes the wanted number when the staff alone can't — optional, in brackets
     const option = new Set();
     if (qui.length + nn < Math.min(voulu, C.supJusqua)) {
-      const x = sups.filter(s => !qui.includes(s) && dispoDe(s, t, b) != null && dispoDe(s, t, b) - t >= C.minSit)
-        .sort((u, v) => repos(v, t) - repos(u, t))[0];
+      const x = supsLibres().find(u => !longue(u, t, dispoDe(u, t, b)));          // optional: never 1 h 30
       if (x) { qui.push(x); option.add(x); }
     }
     // each one sits until the end of the slot or until they must leave; a seat left early goes to the most rested
     // of the other side (« YH/GA »)
     for (const p of qui) {
       const f = dispoDe(p, t, b);
-      sits.push([p, t, f, option.has(p)]); dernier.set(p, f);
+      sits.push([p, t, f, option.has(p)]); noter(p, t, f);
       if (f < b && b - f >= C.minSit) {
-        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip)
+        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip && peut(q, f, b) &&
+            !(a === 1260 && closerDe(q) && tranches.length))                       // the closer keeps fresh for 22:00
           .sort((x, y) => (cote.get(x) === k ? 1 : 0) - (cote.get(y) === k ? 1 : 0) || repos(y, f) - repos(x, f))[0];
-        if (r) { sits.push([r, f, b]); dernier.set(r, b); }
+        if (r) { sits.push([r, f, b]); noter(r, f, b); }
       }
     }
     // arrivée : someone who arrives during this slot, on this side, whose side's next full hour is more than an hour
@@ -1631,14 +1661,14 @@ function planCotes(gens, cfg) {
     jour.filter(p => p.s > t && p.s < b && b - p.s >= C.minSit && cote.get(p) === k && !dernier.has(p) && dispoDe(p, p.s, b) != null)
       .forEach(p => {
         const g = C.grille.find(([x, y, c]) => c === k && x >= b && y - x >= 60);
-        if (g && g[0] - p.s > 60) { sits.push([p, p.s, dispoDe(p, p.s, b)]); dernier.set(p, dispoDe(p, p.s, b)); }
+        if (g && g[0] - p.s > 60) { sits.push([p, p.s, dispoDe(p, p.s, b)]); noter(p, p.s, dispoDe(p, p.s, b)); }
       });
   }
   // ---- (the newcomers' early sit is done in the loop above, see « arrivée »)
   // the closer: 22:00 → until they leave, with the night from 22:15 (the most rested one)
   const cl = jour.filter(p => closerDe(p) && dispoDe(p, C.closer[0], C.closer[1]) != null)
     .sort((x, y) => repos(y, C.closer[0]) - repos(x, C.closer[0]))[0];
-  if (cl && tranches.length) sits.push([cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1])]);
+  if (cl && tranches.length && peut(cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1]))) sits.push([cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1])]);
 
   // ---- the lines: a line each time the sitters change
   const lignes = [];
