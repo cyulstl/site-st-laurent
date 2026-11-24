@@ -127,10 +127,14 @@
     .cal .j .n { font-size: 13.5px; color: #3c4043; }
     .cal .j.passe .n { color: var(--muted); }
   }
+  .en-test { flex: 0 0 auto; margin: 8px 16px 0; padding: 6px 10px; border-radius: 6px; background: #fef7e0;
+             border: 1px solid #f9d77e; border-left: 4px solid #f9ab00; color: #6b4400; font-size: 12px; line-height: 1.4; }
+  @media (max-width: 420px) { .en-test { margin: 8px 12px 0; } }
 </style>
 </head>
 <body>
 <div id="app">
+<div class="en-test"><b>En test</b> : cette page est encore en développement. Vérifie avant de t'y fier et signale tout problème à UK.</div>
   <header>
     <h1>Trouver un échange</h1>
     <label>Je suis <select id="moi"><option value="">— initiales —</option></select></label>
