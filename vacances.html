@@ -30,7 +30,8 @@
   .onglets { display: inline-flex; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
   .onglets button { border: 0; background: #fff; padding: 5px 14px; cursor: pointer; }
   .onglets button.on { background: #e8f0fe; color: #174ea6; font-weight: 500; }
-  label.moi select { margin-left: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  label.moi { font-size: 16px; font-weight: 500; color: #202124; }
+  label.moi select { margin-left: 6px; padding: 6px 10px; font-size: 16px; font-weight: 600; border: 1.5px solid #9aa0a6; border-radius: 8px; background: #fff; }
   .mois { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 16px 0; }   /* right above the grid */
   .mois:empty { display: none; }
   .mois button { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--muted); }
@@ -186,7 +187,7 @@
 </header>
 <div class="barre">
   <div class="onglets" id="onglets"></div>
-  <label class="moi">Moi : <select id="moi"><option value="">—</option></select></label>
+  <label class="moi">Je suis : <select id="moi"><option value="">—</option></select></label>
   <button class="plein" id="bPlein" hidden title="Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; Plein écran</button>
 </div>
 <div id="tour"></div>
@@ -224,7 +225,7 @@ const mem = {
 // S.unParUn = { round: true/false } : click single days instead of whole cycles, as chosen by the person for that round;
 // not chosen: on by default where incomplete cycles are allowed (round 3), off in rounds 1-2; always in a round of single days
 // initials given by the link of the « c'est ton tour » email (…&moi=GE, put in by the server) win over the remembered ones
-document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('regle-d')) mem.set('regle', e.target.open ? '1' : ''); }, true);
+document.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.mem; if (k) mem.set(k, e.target.open ? '1' : ''); }, true);
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
 const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false,
@@ -288,8 +289,8 @@ function afficherMode() {
   const ok = mm && mm.gi === S.g && !(CONFIG.regles[mm.g.tour] || { jours: true }).jours;
   el.hidden = !ok; if (!ok) { el.innerHTML = ''; return; }
   const on = unParUnDe(mm.g);
-  el.innerHTML = `<label class="${on ? 'on' : ''}"><input type="checkbox" id="unParUn"${on ? ' checked' : ''}> Choisir les jours un par un (cycle incomplet)</label>` +
-    `<span class="aide">${on ? 'Chaque clic ajoute ou enlève un seul jour.' : 'Sinon, un clic prend tout le cycle (sans les jours déjà au maximum ; clique un de ces jours pour utiliser ton overlap).'}</span>`;
+  el.innerHTML = `<label class="${on ? 'on' : ''}"><input type="checkbox" id="unParUn"${on ? ' checked' : ''}> Choisir les jours un par un</label>` +
+    (on ? '<span class="aide">Chaque clic ajoute ou enlève un seul jour.</span>' : '');
 }
 function afficher() {
   if (!S.d) return;
@@ -454,15 +455,16 @@ const nOvTot = cycles => cycles.reduce((s, c) => s + c.ks.filter(k => etatJour(S
 function afficherDemande() {
   const el = document.getElementById('dem');
   const mm = moiDe();
-  if (!mm) { el.innerHTML = '<h2>Ma demande</h2><div class="aide">Choisis tes initiales en haut (« Moi ») : ta rangée devient cliquable et tu peux préparer ta demande.</div>'; return; }
+  if (!mm) { el.innerHTML = '<h2>Ma demande</h2><div class="aide">Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ta demande.</div>'; return; }
   if (mm.gi !== S.g) { el.innerHTML = `<h2>Ma demande</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
   const a = analyse(), g = mm.g, r = (S.d.regles || {})[String(g.tour)] || [];
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
   const note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
-    `<div class="aide">Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour est ajouté' : 'les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap)'}. Clique encore pour l'enlever. ` +
-    `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.` +
-    (r[1] ? `<details class="regle-d"${mem.get('regle') ? ' open' : ''}><summary>Règle du tour ${g.tour}</summary>${esc(r[1])}</details>` : '') + '</div>' +
+    `<div class="aide"><details class="regle-d" data-mem="instr"${mem.get('instr') ? ' open' : ''}><summary>Instructions</summary>` +
+    `Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour est ajouté' : 'les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap)'}. Clique encore pour l'enlever. ` +
+    `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.</details>` +
+    (r[1] ? `<details class="regle-d" data-mem="regle"${mem.get('regle') ? ' open' : ''}><summary>Règle du tour ${g.tour}</summary>${esc(r[1])}</details>` : '') + '</div>' +
     boiteCode();
   if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
   if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.</div>';
