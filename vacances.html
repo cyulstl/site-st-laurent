@@ -167,9 +167,19 @@
   button.plier { border: 1px solid var(--line); background: #fff; color: var(--accent); border-radius: 9px; font-family: inherit; font-weight: 600; font-size: 12px; line-height: 14px;
                  padding: 0 6px; cursor: pointer; }
   button.plier:hover { background: #e8f0fe; border-color: var(--accent); }
+  /* bandeau TEST (à enlever quand la vraie sélection commence) */
+  .bandeau-test { margin: 10px 16px 0; border-radius: 10px; overflow: hidden; border: 2px solid #f9ab00; background: #fef7e0; }
+  .bandeau-test .ruban { height: 10px; background: repeating-linear-gradient(135deg, #f9ab00 0 14px, #3c4043 14px 28px); }
+  .bandeau-test .txt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 12px 16px 14px; }
+  .bandeau-test b { font-size: 22px; font-weight: 800; letter-spacing: .06em; color: #b06000; }
+  .bandeau-test span { font-size: 15px; line-height: 1.45; color: #3c4043; }
+  @media (max-width: 600px) { .bandeau-test { margin: 8px 8px 0; } .bandeau-test b { font-size: 19px; } .bandeau-test span { font-size: 14px; } }
 </style>
 </head>
 <body>
+<!-- TEST : enlever ce bandeau quand la vraie sélection commence -->
+<div class="bandeau-test" role="note"><div class="ruban"></div><div class="txt"><b>TEST EN COURS</b>
+  <span>Données fictives : ce ne sont pas les vrais choix de vacances. Ne pas en tenir compte. La vraie sélection sera annoncée par UK.</span></div></div>
 <header>
   <h1>Vacances — sélection</h1>
   <span class="etat" id="etat">Chargement…</span>
