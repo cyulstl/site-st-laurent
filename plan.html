@@ -328,7 +328,6 @@
       <div class="seg" role="group" aria-label="Vue">
         <button data-v="mois">Mois</button><button data-v="semaine"><span class="lg-sem">Semaine</span><span class="ct-sem">Sem.</span></button><button data-v="jour">Jour</button>
       </div>
-      <button class="btn" id="bPlan" title="Qui est assis quand, pour la journée affichée — en test : un brouillon à vérifier">Plan du jour <span class="beta">bêta</span></button>
       <button class="btn" id="bLeg" hidden title="Ce que veulent dire les couleurs">Légende</button>
       <button class="btn" id="bPlein" hidden
          title="Ouvrir l'horaire dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; <span class="lg-plein">Plein écran</span></button>
@@ -1804,7 +1803,7 @@ function htmlDuPlan(day) {
       `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
   return html;
 }
-document.getElementById('bPlan').onclick = e => { S.planJour = S.cur; ouvrirPlan(e.currentTarget); };
+// (the calendar no longer has a « Plan du jour » button: the plan has its own page, plan.html)
 const clicPlan = e => {
   const b = e.target.closest('[data-plan]'); if (!b) return;
   const a = b.dataset.plan, day = S.planJour;
