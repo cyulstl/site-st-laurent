@@ -598,6 +598,15 @@ window.EN_PAGE = [
                       cursor: pointer; font-size: 13px; color: var(--accent); }
   .pop .btns button:hover { background: #f6f9fe; }
   .pop.sheet .btns button { flex: 1 1 auto; padding: 11px 14px; font-size: 15px; }
+  /* « Personnes à afficher » on a phone: never wider than the screen (Wix's phone frame is 320 px), small boxes,
+     and a list that scrolls instead of growing (in Wix the frame is very tall, so vh means nothing there) */
+  .pop.sheet.large { width: auto; box-sizing: border-box; }
+  .pop.sheet h3 { font-size: 16px; }
+  .pop.sheet .dt { font-size: 13px; }
+  .pop.sheet .choix { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 4px; max-height: 240px; }
+  .pop.sheet .choix label { padding: 5px 5px; gap: 4px; font-size: 13px; }
+  .pop.sheet .btns { margin-top: 10px; }
+  .pop.sheet .btns button { padding: 8px 12px; font-size: 14px; }
 
   /* compact phone layout (CONFIG.telephone = 'compact'); the class is set by ajusterTaille() */
   body.etroit .bar { padding: 8px 8px 4px; }

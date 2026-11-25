@@ -319,6 +319,9 @@ window.EN_PAGE = [
   .pop .dt { color: var(--muted); margin-bottom: 8px; }
   .pop .choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 5px;
                 max-height: 46vh; overflow-y: auto; margin-top: 4px; }
+  /* on a phone: small boxes and a list that scrolls instead of growing (in Wix the frame is very tall: vh means nothing) */
+  .pop.sheet .choix { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 4px; max-height: 240px; }
+  .pop.sheet .choix label { padding: 5px 5px; gap: 4px; font-size: 13px; }
   .pop .choix label { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px;
                       background: var(--soft); cursor: pointer; font-weight: 500; user-select: none; }
   .pop .choix label:has(input:checked) { background: #d3e2fc; color: #0b3a8c; }
