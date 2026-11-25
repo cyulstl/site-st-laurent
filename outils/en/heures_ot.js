@@ -16,7 +16,7 @@
 ['Année OT depuis le {d} · OT faits et prévus · le moins d\'heures est appelé en premier · moyenne {m} h',
  'OT year since {d} · OT done and planned · fewest hours are called first · average {m} h'],
 ['Aucun contrôleur qualifié coché.', 'No qualified controller ticked.'],
-['En formation', 'In training'], ['Appelés après les contrôleurs qualifiés.', 'Called after the qualified controllers.'], ['en formation', 'in training'],
+['En formation', 'Trainees'], ['Appelés après les contrôleurs qualifiés.', 'Called after the qualified controllers.'], ['en formation', 'trainee'],
 ['Les OT déjà à l\'horaire comptent tout de suite, même s\'ils sont plus tard (', 'OT already on the schedule counts right away, even if it\'s later ('],
 ['faits,', 'done,'],
 ['prévus). Un OT ajouté ou annulé dans ESS est pris en compte à la mise à jour suivante (chaque heure). Un OT peut toujours être refusé. Les heures viennent des OT ($) de l\'horaire ESS ; une correction se fait dans l\'onglet « Heures OT » (colonne Ajustement).',

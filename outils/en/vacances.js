@@ -134,7 +134,7 @@
 ['Aucun jour choisi.', 'No day chosen.'], ['Aucun échange.', 'No trade.'], ['Date hors de l\'année de vacances.', 'Date outside the vacation year.'],
 ['Date mal écrite.', 'Badly written date.'], ['Initiales inconnues dans la feuille des vacances.', 'Initials not found in the vacation sheet.'],
 ['Les deux personnes doivent être du même groupe ({g}).', 'Both people must be in the same group ({g}).'],
-['Les personnes en formation ne choisissent pas de vacances.', 'People in training don\'t pick vacation.'], ['Trop d\'échanges dans un seul envoi (10 au plus).', 'Too many trades in one send (10 at most).'],
+['Les personnes en formation ne choisissent pas de vacances.', 'Trainees don\'t pick vacation.'], ['Trop d\'échanges dans un seul envoi (10 au plus).', 'Too many trades in one send (10 at most).'],
 ['Trop de jours dans un seul bid.', 'Too many days in one bid.'], ['Tu as déjà fini le tour {n} (✓). Reviens au prochain tour.', 'You\'ve already finished round {n} (✓). Come back next round.'],
 ['Échange mal écrit.', 'Badly written trade.'], ['contrôleurs', 'controllers'], ['surveillants', 'supervisors'],
 ['Erreur du serveur : rien n\'est inscrit. UK a été avisé ; réessaie plus tard.', 'Server error: nothing is entered. UK has been told; try again later.'],
