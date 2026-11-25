@@ -288,7 +288,12 @@ window.EN_PAGE = [
   header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
   .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
   .ajout-lien { font-size: 13px; color: var(--accent); text-decoration: none; }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0; }
+  /* the form is closed until « ＋ Soumettre un congé »: the list and its timeline take the whole width;
+     open, it sits beside the list on a computer and at the top on a phone */
+  main { display: flex; flex-direction: column; }
+  #ajout { display: none; }
+  body.form-ouvert #ajout { display: block; }
+  @media (min-width: 761px) { body.form-ouvert main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0; } }
   section { padding: 14px 16px 22px; min-width: 0; }
   section + section { border-left: 1px solid var(--line); }
   h2 { font-size: 16px; font-weight: 500; color: #202124; margin: 0 0 4px; }
@@ -344,10 +349,9 @@ window.EN_PAGE = [
   .msg.ok { background: #e6f4ea; color: var(--ok); } .msg.x { background: #fce8e6; color: var(--x); } .msg.w { background: #fef7e0; color: var(--wait); }
 
   @media (max-width: 760px) {
-    main { display: flex; flex-direction: column; }
     section + section { border-left: 0; border-top: 1px solid var(--line); }
     /* « Soumettre un congé » on a phone: the form comes up to the top, right under the button */
-    body.form-haut #ajout { order: -1; border-top: 0; border-bottom: 1px solid var(--line); }
+    body.form-ouvert #ajout { order: -1; border-top: 0; border-bottom: 1px solid var(--line); }
     .etat { margin-left: 0; width: 100%; }
   }
   select, input, textarea { min-width: 0; width: 100%; box-sizing: border-box; }
@@ -461,10 +465,10 @@ function ligneDuTemps(L) {
   if (!vis.length) return '';
   let tete = '', grille = '';
   // month labels: sized to the real width so they never overlap — years first (each January), then the first
-  // month, then every 1, 2, 3 or 6 months, whichever leaves room; a label that would touch another is dropped
+  // month, then every 3 months (every 6 if there's really no room); a label that would touch another is dropped
   const box = document.getElementById('liste'), cs = getComputedStyle(box);
   const W = Math.max(150, (box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 52) || 600);
-  const pxM = W / mois, pas = [1, 2, 3, 6].find(s => s * pxM >= 40) || 12;
+  const pxM = W / mois, pas = 3 * pxM >= 28 ? 3 : 6 * pxM >= 28 ? 6 : 12;
   const ctx = document.createElement('canvas').getContext('2d'); ctx.font = '10.5px Roboto, "Segoe UI", Arial, sans-serif';
   const larg = t => ctx.measureText(t).width + 2, pris = [];
   const libre = (px, t) => px + larg(t) <= W + 2 && pris.every(([a, b]) => px + larg(t) + 8 <= a || px >= b + 8);
@@ -498,16 +502,16 @@ let largListe = 0, tLarg = 0;
 addEventListener('resize', () => { clearTimeout(tLarg); tLarg = setTimeout(() => {
   const w = document.getElementById('liste').clientWidth; if (w !== largListe) { largListe = w; afficher(); } }, 150); });
 document.getElementById('debut').onchange = e => { const f = document.getElementById('fin'); f.min = e.target.value; };
-// « ＋ Soumettre un congé »: on a computer the form sits beside the list; on a phone it sits under the whole list, and the
-// page inside Wix can't scroll by itself — so the form moves up to the top, right under the button (tap again to put it back)
+// « ＋ Soumettre un congé » opens the form (closed by default, so the timeline gets the whole width): beside the list on a
+// computer, at the top right under the button on a phone (the page inside Wix can't scroll by itself); again to close it
 const lienAjout = document.querySelector('.ajout-lien');
 lienAjout.addEventListener('click', e => {
-  if (!matchMedia('(max-width: 760px)').matches) return;
   e.preventDefault();
-  const haut = !document.body.classList.contains('form-haut');
-  document.body.classList.toggle('form-haut', haut);
-  lienAjout.textContent = haut ? '✕ Fermer le formulaire' : '＋ Soumettre un congé';
-  if (haut) try { document.getElementById('ajout').scrollIntoView({ block: 'start' }); } catch (x) { /* not needed */ }
+  const ouvert = !document.body.classList.contains('form-ouvert');
+  document.body.classList.toggle('form-ouvert', ouvert);
+  lienAjout.textContent = ouvert ? '✕ Fermer le formulaire' : '＋ Soumettre un congé';
+  largListe = document.getElementById('liste').clientWidth; afficher();     // the timeline gives back / takes the room
+  if (ouvert && matchMedia('(max-width: 760px)').matches) try { document.getElementById('ajout').scrollIntoView({ block: 'start' }); } catch (x) { /* not needed */ }
 });
 document.getElementById('f').addEventListener('submit', e => {
   e.preventDefault();
