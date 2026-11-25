@@ -343,10 +343,10 @@ window.EN_PAGE = [
 ['Aucune paire possible.', 'No possible pair.'],
 ['{a} → arrive à {b}', '{a} → comes in at {b}'], ['{a} → reste jusqu\'à {b}', '{a} → stays until {b}'], ['couvre {n} %', 'covers {n}%'],
 ['Ordre d\'appel :', 'Call order:'],
-['les listes sont dans l\'ordre d\'appel, le moins d\'heures d\'OT depuis le {d} en premier, OT déjà prévus à l\'horaire compris. Les stagiaires ne sont pas proposés (ils ne peuvent pas couvrir un quart). Un OT peut toujours être refusé. Maximum de {m} h d\'OT par période : qui le dépasserait garde sa place, avec son solde négatif en rouge (des congés comp ou 699 peuvent débloquer des heures ; chacun vérifie son solde).',
- 'the lists are in call order, fewest OT hours since {d} first, OT already planned on the schedule included. Trainees aren\'t offered (they can\'t cover a shift). An OT can always be refused. Maximum of {m} h of OT per period: whoever would go over keeps their place, with their negative balance in red (comp or 699 leave can unlock hours; everyone checks their own balance).'],
-['les listes sont dans l\'ordre d\'appel, le moins d\'heures d\'OT depuis le {d} en premier, OT déjà prévus à l\'horaire compris. Les stagiaires ne sont pas proposés (ils ne peuvent pas couvrir un quart). Un OT peut toujours être refusé.',
- 'the lists are in call order, fewest OT hours since {d} first, OT already planned on the schedule included. Trainees aren\'t offered (they can\'t cover a shift). An OT can always be refused.'],
+['les listes sont dans l\'ordre d\'appel, le moins d\'heures d\'OT depuis le {d} en premier, OT déjà prévus à l\'horaire compris. Les personnes en formation ne sont pas proposées (elles ne peuvent pas couvrir un quart). Un OT peut toujours être refusé. Maximum de {m} h d\'OT par période : qui le dépasserait garde sa place, avec son solde négatif en rouge (des congés comp ou 699 peuvent débloquer des heures ; chacun vérifie son solde).',
+ 'the lists are in call order, fewest OT hours since {d} first, OT already planned on the schedule included. People in training aren\'t offered (they can\'t cover a shift). An OT can always be refused. Maximum of {m} h of OT per period: whoever would go over keeps their place, with their negative balance in red (comp or 699 leave can unlock hours; everyone checks their own balance).'],
+['les listes sont dans l\'ordre d\'appel, le moins d\'heures d\'OT depuis le {d} en premier, OT déjà prévus à l\'horaire compris. Les personnes en formation ne sont pas proposées (elles ne peuvent pas couvrir un quart). Un OT peut toujours être refusé.',
+ 'the lists are in call order, fewest OT hours since {d} first, OT already planned on the schedule included. People in training aren\'t offered (they can\'t cover a shift). An OT can always be refused.'],
 ['Heures d\'OT mises à jour {d}.', 'OT hours updated {d}.'],
 ['selon les heures d\'OT de l\'année OT (remise à zéro au début de la première période publiée après le 1er septembre). Ces heures ne sont pas chargées :',
  'based on OT hours in the OT year (reset at the start of the first period published after September 1). These hours aren\'t loaded:'],
@@ -385,7 +385,7 @@ window.EN_PAGE = [
     3. deux quarts de 12 h (deux personnes déjà au travail qui allongent) qui couvrent la plupart des heures.
   Jour pas encore publié : seulement le cycle 5-4 (qui est en congé), rien d'autre n'est vérifié.
   Les listes suivent la liste d'appel de la page Heures d'OT (le moins d'heures d'OT de l'année OT en premier, OT prévus à
-  l'horaire compris). Les stagiaires ne sont jamais proposés : ils ne peuvent pas couvrir un quart. Les conditions (quick change…) et un solde négatif s'affichent sans changer l'ordre ;
+  l'horaire compris). Les personnes en formation ne sont jamais proposées : elles ne peuvent pas couvrir un quart. Les conditions (quick change…) et un solde négatif s'affichent sans changer l'ordre ;
   seuls ceux qui ne peuvent pas sont mis à la fin. Une paire de 12 h vient au rang de la personne appelée le plus tard des deux.
   Une personne qui dépasserait le maximum d'OT de la période garde sa place, avec son solde négatif en rouge : des congés comp
   ou 699 peuvent lui débloquer des heures, invisibles dans ESS.
@@ -967,7 +967,7 @@ function afficherRes() {
   const res = S.jours.slice().sort().map(analyser);
   const T = S.ts;
   let h = T ? `<div class="rappel">📋 <b>Ordre d'appel :</b> les listes sont dans l'ordre d'appel, le moins d'heures d'OT depuis le ` +
-      `${fmt(T.annee.debut, { day: 'numeric', month: 'long', year: 'numeric' })} en premier, OT déjà prévus à l'horaire compris. Les stagiaires ne sont pas proposés (ils ne peuvent pas couvrir un quart). Un OT peut toujours être refusé.` +
+      `${fmt(T.annee.debut, { day: 'numeric', month: 'long', year: 'numeric' })} en premier, OT déjà prévus à l'horaire compris. Les personnes en formation ne sont pas proposées (elles ne peuvent pas couvrir un quart). Un OT peut toujours être refusé.` +
       `${T.max ? ` Maximum de ${nb(T.max)} h d'OT par période : qui le dépasserait garde sa place, avec son solde négatif en rouge ` +
         `(des congés comp ou 699 peuvent débloquer des heures ; chacun vérifie son solde).` : ''}` +
       `<small>Heures d'OT mises à jour ${esc(T.at)}.</small></div>`

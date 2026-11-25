@@ -252,7 +252,7 @@ window.EN_PAGE = [
 ['Année OT depuis le {d} · OT faits et prévus · le moins d\'heures est appelé en premier · moyenne {m} h',
  'OT year since {d} · OT done and planned · fewest hours are called first · average {m} h'],
 ['Aucun contrôleur qualifié coché.', 'No qualified controller ticked.'],
-['Stagiaires', 'Trainees'], ['Appelés après les contrôleurs qualifiés.', 'Called after the qualified controllers.'], ['stagiaire', 'trainee'],
+['En formation', 'In training'], ['Appelés après les contrôleurs qualifiés.', 'Called after the qualified controllers.'], ['en formation', 'in training'],
 ['Les OT déjà à l\'horaire comptent tout de suite, même s\'ils sont plus tard (', 'OT already on the schedule counts right away, even if it\'s later ('],
 ['faits,', 'done,'],
 ['prévus). Un OT ajouté ou annulé dans ESS est pris en compte à la mise à jour suivante (chaque heure). Un OT peut toujours être refusé. Les heures viennent des OT ($) de l\'horaire ESS ; une correction se fait dans l\'onglet « Heures OT » (colonne Ajustement).',
@@ -501,7 +501,7 @@ function afficher() {
     `<table><thead><tr>${entete('r', 'Rang', 'n', S.triA, 'tria', 'rang d\'appel')}${entete('i', 'Initiales', '', S.triA, 'tria')}` +
     `${entete('p', 'Faites / prévues', 'barre-t', S.triA, 'tria', 'heures prévues')}${entete('t', 'Heures totales', 'n', S.triA, 'tria')}</tr></thead><tbody>` +
     (qual.length ? qual.map(g => ligne(g, g.rang)).join('') : '<tr><td colspan="4" class="vide">Aucun contrôleur qualifié coché.</td></tr>') + '</tbody></table>';
-  if (stag.length) a += '<h2 style="margin-top:16px">Stagiaires</h2><div class="sous">Appelés après les contrôleurs qualifiés.</div>' +
+  if (stag.length) a += '<h2 style="margin-top:16px">En formation</h2><div class="sous">Appelés après les contrôleurs qualifiés.</div>' +
     '<table><tbody>' + stag.map(g => ligne(g, '')).join('') + '</tbody></table>';
   a += '<div class="note">Les OT déjà à l\'horaire comptent tout de suite, même s\'ils sont plus tard ' +
     '(<span class="leg" style="background:var(--bar)"></span>faits, <span class="leg" style="background:repeating-linear-gradient(-45deg,#b9e0ee 0 3px,#d6eef6 3px 6px)"></span>prévus). ' +
@@ -542,7 +542,7 @@ function afficher() {
   for (const g of lignes) {
     const [f, pv] = g.p[k], reste = T.max ? Math.round((T.max - utilise(g, k)) * 100) / 100 : null, au = autres(g);
     const cls = reste === null ? '' : reste <= 0 ? 'x' : reste < CONFIG.quartOT ? 'w' : 'ok';
-    p += `<tr><td class="ini"><b>${esc(g.i)}</b>${g.st ? '<span class="tag">stagiaire</span>' : ''}</td>` +
+    p += `<tr><td class="ini"><b>${esc(g.i)}</b>${g.st ? '<span class="tag">en formation</span>' : ''}</td>` +
       `<td class="n">${f ? h(f) + ' h' : '—'}</td><td class="n">${pv ? h(pv) + ' h' : '—'}</td>` +
       (ess ? `<td class="n">${au ? (au > 0 ? '+' : '') + h(au) + ' h' : '—'}</td>` : '') +
       (T.max ? `<td class="n ${cls}">${h(reste)} h</td>` : '') + '</tr>';

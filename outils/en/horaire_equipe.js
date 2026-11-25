@@ -7,7 +7,7 @@
 ['Plein écran', 'Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
 // shift groups and kinds
 ['Nooner', 'Nooner'], ['Soir', 'Evening'], ['Nuit', 'Night'], ['jour', 'day'], ['nooner', 'nooner'], ['soir', 'evening'], ['nuit', 'night'],
-['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['Stagiaire', 'Trainee'], ['stagiaire', 'trainee'],
+['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['En formation', 'In training'], ['en formation', 'in training'],
 ['quart prolongé', 'extended shift'], ['Quart prolongé', 'Extended shift'], ['$ Temps supplémentaire', '$ OT'],
 ['autre activité', 'other activity'], ['Autre activité', 'Other activity'], ['Formation OJT', 'OJT training'],
 // hover texts

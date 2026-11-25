@@ -243,7 +243,7 @@ window.EN_PAGE = [
 ['Plein écran', 'Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
 // shift groups and kinds
 ['Nooner', 'Nooner'], ['Soir', 'Evening'], ['Nuit', 'Night'], ['jour', 'day'], ['nooner', 'nooner'], ['soir', 'evening'], ['nuit', 'night'],
-['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['Stagiaire', 'Trainee'], ['stagiaire', 'trainee'],
+['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['En formation', 'In training'], ['en formation', 'in training'],
 ['quart prolongé', 'extended shift'], ['Quart prolongé', 'Extended shift'], ['$ Temps supplémentaire', '$ OT'],
 ['autre activité', 'other activity'], ['Autre activité', 'Other activity'], ['Formation OJT', 'OJT training'],
 // hover texts
@@ -711,7 +711,7 @@ const CONFIG = {
   ],
   autre:       { nom: 'Autre activité (formation…)', couleur: '#80868b', teinte: '#eeeeee' },
   superviseur: { nom: 'Superviseur (S)',             couleur: '#c62828', teinte: '#f9d0d0' },
-  stagiaire:   { nom: 'Stagiaire',                   couleur: '#f2b600', teinte: '#fdedb0' },
+  stagiaire:   { nom: 'En formation',                couleur: '#f2b600', teinte: '#fdedb0' },
   tz: 'America/Toronto',
   // Plan du jour : qui est assis quand (contrôleurs ; superviseurs, stagiaires et formations ne comptent pas)
   plan: {
@@ -797,7 +797,7 @@ const labelQ = q => nomQ(q) + (q.act ? ' ' + q.act : '');
 // times in 24 h, with $ in front for overtime: « $06:15 - 15:00 »
 const heures = q => (q.f & 1 ? '$' : '') + hm(q.a) + ' - ' + hm(q.b);
 const titreQ = q => `${nomQ(q)} · ${heures(q)}` + (q.act ? ` · ${T(q.act)}` : '') + (q.f & 1 ? ' · OT' : '') +
-  (estStag(q.who) ? ' · ' + T('stagiaire') : '') + (q.prolonge ? ' · ' + T('quart prolongé') : '') +
+  (estStag(q.who) ? ' · ' + T('en formation') : '') + (q.prolonge ? ' · ' + T('quart prolongé') : '') +
   (minuitQ(q) ? ' · ' + T(`commence à minuit (nuit du ${fmt(addDays(q.day, -1), { weekday: 'long', day: 'numeric' })} au ${fmt(q.day, { day: 'numeric' })})`) : '') +
   (q.minuit ? ' · ' + T(`commence à minuit le ${fmt(q.jour, { weekday: 'long', day: 'numeric' })} (nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} au ${fmt(q.jour, { day: 'numeric' })})`) : '');
 
@@ -2034,7 +2034,7 @@ const hhmmP = m => { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 6
 function gensPlan(day) {
   const pris = [], hors = [];
   for (const q of S.byDay[day] || []) {
-    const pourquoi = estStag(q.who) ? 'stagiaire' : ((q.f & 4) && !q.parts) ? (q.act || 'autre activité') : '';
+    const pourquoi = estStag(q.who) ? 'en formation' : ((q.f & 4) && !q.parts) ? (q.act || 'autre activité') : '';
     if (pourquoi) { hors.push([q.who, pourquoi]); continue; }
     const fen = q.parts ? q.parts.filter(x => x.k === 0 || x.k === 1).map(x => [q.off + x.s0, q.off + x.s1]) : null;
     if (fen && !fen.length) { hors.push([q.who, q.act || 'autre activité']); continue; }

@@ -234,18 +234,18 @@ window.EN_PAGE = [
 ['Fête de la St-Jean', 'St-Jean-Baptiste Day'], ['Fête du Canada', 'Canada Day'], ['Fête du Travail', 'Labour Day'],
 ['Vérité et réconciliation', 'Truth and Reconciliation Day'], ['Action de grâce', 'Thanksgiving'], ['Jour du Souvenir', 'Remembrance Day'],
 ['Noël', 'Christmas'], ['Lendemain de Noël', 'Boxing Day'], ['Journée nationale des patriotes', 'National Patriots\' Day'],
-['Vacances — St-Laurent', 'Vacation — St-Laurent'], ['Vacances — sélection', 'Vacation — picks'],
+['Vacances — St-Laurent', 'Vacation — St-Laurent'], ['Vacances — sélection', 'Vacation bid'],
 ['TEST EN COURS', 'TEST IN PROGRESS'],
 ['Données fictives : ce ne sont pas les vrais choix de vacances. Ne pas en tenir compte. La vraie sélection sera annoncée par UK.',
  'Fake data: these aren\'t the real vacation picks. Ignore them. UK will announce the real selection.'],
-['Je suis :', 'I am:'], ['Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the picks in a new tab, full screen width'],
+['Je suis :', 'I am:'], ['Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the bid in a new tab, full screen width'],
 ['⤢ Plein écran', '⤢ Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
 ['Surveillants', 'Supervisors'],
 ['Feuille lue à {t}', 'Sheet read at {t}'], ['Relire la feuille maintenant', 'Read the sheet again now'],
 ['Choisir les jours un par un', 'Choose days one at a time'], ['Chaque clic ajoute ou enlève un seul jour.', 'Each click adds or removes a single day.'],
 ['{g} — tour {n}', '{g} — round {n}'], ['C\'est ton tour !', 'It\'s your turn!'], ['C\'est au tour de', 'Now picking:'],
 ['Tout le monde a fini ce tour.', 'Everyone has finished this round.'],
-['Demandes en file d\'attente (inscrites automatiquement à leur tour) : {x}', 'Queued requests (entered automatically at their turn): {x}'],
+['Pre-bids (inscrits automatiquement à leur tour) : {x}', 'Pre-bids (entered automatically at their turn): {x}'],
 ['Maximum {n} par jour · {m} overlap par personne', 'Maximum {n} per day · {m} overlap per person'],
 ['Maximum {n} par jour · {m} overlaps par personne', 'Maximum {n} per day · {m} overlaps per person'],
 // grid (through T())
@@ -264,7 +264,7 @@ window.EN_PAGE = [
 ['vacances (le chiffre = le tour)', 'vacation (the number = the round)'], ['jour au maximum (plus foncé : en congé)', 'day at the maximum (darker: day off)'],
 ['overlap utilisé', 'overlap used'], ['congé (cycle 5-4)', 'day off (5-4 cycle)'], ['initiales : le collègue travaille à sa place', 'initials: the colleague works in their place'],
 ['pris sur un congé (à vérifier)', 'taken on a day off (to be checked)'], ['à son tour', 'their turn'],
-['ma demande (pas encore dans la feuille)', 'my request (not in the sheet yet)'], ['férié', 'stat holiday'], ['relâche', 'spring break'], ['fin de semaine', 'weekend'],
+['mon bid (pas encore dans la feuille)', 'my bid (not in the sheet yet)'], ['férié', 'stat holiday'], ['relâche', 'spring break'], ['fin de semaine', 'weekend'],
 // checks while choosing
 ['1 jour déjà complet', '1 day already full'], ['{n} jours déjà complets', '{n} days already full'],
 ['cycle incomplet alors que 1 autre jour est libre ({d})', 'incomplete cycle while 1 other day is free ({d})'],
@@ -280,40 +280,40 @@ window.EN_PAGE = [
 ['{n} jours choisis, il t\'en reste {s} (solde)', '{n} days chosen, you have {s} left (balance)'],
 ['il te faudrait {n} overlaps, il t\'en reste {m}', 'you\'d need {n} overlaps, you have {m} left'],
 ['tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour', 'you\'ve already finished this round (✓ in the sheet): come back next round'],
-['ce n\'est pas encore ton tour (c\'est au tour de {ini}) : ta demande attendra en file et s\'inscrira toute seule à ton tour',
- 'it\'s not your turn yet ({ini} is picking): your request will wait in the queue and be entered automatically at your turn'],
-['une demande qui ne respecte pas les règles n\'est pas inscrite : elle est envoyée à UK, qui décide',
- 'a request that doesn\'t follow the rules isn\'t entered: it\'s sent to UK, who decides'],
+['ce n\'est pas encore ton tour (c\'est au tour de {ini}) : ce sera un pre-bid, inscrit automatiquement à ton tour',
+ 'it\'s not your turn yet ({ini} is picking): this will be a pre-bid, entered automatically at your turn'],
+['un bid qui ne respecte pas les règles n\'est pas inscrit : il est envoyé à UK, qui décide',
+ 'a bid that doesn\'t follow the rules isn\'t entered: it\'s sent to UK, who decides'],
 ['✓ {t}', '✓ {t}'], ['✗ {t}', '✗ {t}'], ['↑ {t}', '↑ {t}'], ['⚠ {t}', '⚠ {t}'],
 // my request
-['Ma demande', 'My request'],
-['Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ta demande.',
- 'Choose your initials at the top (“I am”): your row becomes clickable and you can prepare your request.'],
+['Mon bid', 'My bid'],
+['Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ton bid.',
+ 'Choose your initials at the top (“I am”): your row becomes clickable and you can prepare your bid.'],
 ['Tu es dans l\'onglet {g}.', 'You\'re in the {g} tab.'], ['Y aller', 'Go there'],
-['Ma demande — {ini}, tour {n}', 'My request — {ini}, round {n}'], ['Instructions', 'Instructions'], ['Règle du tour {n}', 'Round {n} rule'],
-['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : le jour est ajouté. Clique encore pour l\'enlever. À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s\'inscrit toute seule quand ton tour arrive.',
- 'Click one of your work days in your row (outlined in blue): the day is added. Click again to remove it. At your turn, your request is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it waits in the queue and is entered automatically when your turn comes.'],
-['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap). Clique encore pour l\'enlever. À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s\'inscrit toute seule quand ton tour arrive.',
- 'Click one of your work days in your row (outlined in blue): the days of that cycle that are still free are added (a day already at the maximum: click it to use your overlap). Click again to remove it. At your turn, your request is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it waits in the queue and is entered automatically when your turn comes.'],
-['Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.',
- 'Your request is in the queue: it will be entered automatically at your turn. A new request replaces it.'],
-['Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.',
- 'Your queued request couldn\'t be entered at your turn (days no longer free, or a rule): UK has been told. It\'s still your turn: make your request again.'],
+['Mon bid — {ini}, tour {n}', 'My bid — {ini}, round {n}'], ['Instructions', 'Instructions'], ['Règle du tour {n}', 'Round {n} rule'],
+['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : le jour est ajouté. Clique encore pour l\'enlever. À ton tour, ton bid est inscrit dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, c\'est un pre-bid : il s\'inscrit tout seul quand ton tour arrive.',
+ 'Click one of your work days in your row (outlined in blue): the day is added. Click again to remove it. At your turn, your bid is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it\'s a pre-bid: it\'s entered automatically when your turn comes.'],
+['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap). Clique encore pour l\'enlever. À ton tour, ton bid est inscrit dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, c\'est un pre-bid : il s\'inscrit tout seul quand ton tour arrive.',
+ 'Click one of your work days in your row (outlined in blue): the days of that cycle that are still free are added (a day already at the maximum: click it to use your overlap). Click again to remove it. At your turn, your bid is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it\'s a pre-bid: it\'s entered automatically when your turn comes.'],
+['Ton pre-bid est enregistré : il sera inscrit automatiquement à ton tour. Un nouveau bid le remplace.',
+ 'Your pre-bid is saved: it will be entered automatically at your turn. A new bid replaces it.'],
+['Ton pre-bid n\'a pas pu être inscrit à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ton bid.',
+ 'Your pre-bid couldn\'t be entered at your turn (days no longer free, or a rule): UK has been told. It\'s still your turn: bid again.'],
 ['Aucun jour choisi pour l\'instant.', 'No day chosen yet.'], ['1 jour', '1 day'], ['{n} jours', '{n} days'], ['enlever', 'remove'],
-['Pas encore envoyée : clique « Envoyer ma demande » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.',
- 'Not sent yet: click “Send my request” below. Until then, your days stay saved on this device.'],
-['Note pour UK (facultatif)', 'Note for UK (optional)'], ['Ta demande utilise ton overlap', 'Your request uses your overlap'],
+['Pas encore envoyé : clique « Envoyer mon bid » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.',
+ 'Not sent yet: click “Send my bid” below. Until then, your days stay saved on this device.'],
+['Note pour UK (facultatif)', 'Note for UK (optional)'], ['Ton bid utilise ton overlap', 'Your bid uses your overlap'],
 [': {d} est déjà au maximum. Il te reste {n} overlap pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} is already at the maximum. You have {n} overlap left for the year; once used, it doesn\'t come back.'],
 [': {d} est déjà au maximum. Il te reste {n} overlaps pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} is already at the maximum. You have {n} overlaps left for the year; once used, it doesn\'t come back.'],
 [': {d} sont déjà au maximum. Il te reste {n} overlap pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} are already at the maximum. You have {n} overlap left for the year; once used, it doesn\'t come back.'],
 [': {d} sont déjà au maximum. Il te reste {n} overlaps pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} are already at the maximum. You have {n} overlaps left for the year; once used, it doesn\'t come back.'],
 ['Oui, utiliser mon overlap et envoyer', 'Yes, use my overlap and send'],
-['Envoyer ma demande', 'Send my request'], ['Je ne prends rien à ce tour-ci', 'I\'m not taking anything this round'],
+['Envoyer mon bid', 'Send my bid'], ['Je ne prends rien à ce tour-ci', 'I\'m not taking anything this round'],
 // personal code
 ['Code personnel ✓', 'Personal code ✓'], ['oublier sur cet appareil', 'forget on this device'], ['Effacer le code de cet appareil', 'Clear the code from this device'],
 ['Ton code personnel (4 chiffres, reçu de UK) :', 'Your personal code (4 digits, from UK):'], ['Valider', 'OK'], ['retenir sur cet appareil', 'remember on this device'],
-['Il faut ton code pour envoyer une demande ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.',
- 'You need your code to send a request or a trade. Untick “remember” on a shared computer. Lost code: ask UK.'],
+['Il faut ton code pour envoyer un bid ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.',
+ 'You need your code to send a bid or a trade. Untick “remember” on a shared computer. Lost code: ask UK.'],
 ['4 chiffres.', '4 digits.'], ['Vérification…', 'Checking…'],
 ['Vérification impossible pour le moment. Réessaie dans quelques minutes.', 'Can\'t check right now. Try again in a few minutes.'],
 ['Code incorrect pour {ini}.', 'Wrong code for {ini}.'], ['Code incorrect pour {ini}. Trop d\'essais : réessaie dans une heure.', 'Wrong code for {ini}. Too many tries: try again in an hour.'],
@@ -328,16 +328,16 @@ window.EN_PAGE = [
 ['Pour inscrire dans la grille un échange de quart : qui travaille à la place de qui, et quel jour. Il est inscrit tout de suite s\'il est possible (sinon UK décide) ; UK en reçoit une copie.',
  'To enter a shift trade in the grid: who works instead of whom, and which day. It\'s entered right away if possible (otherwise UK decides); UK gets a copy.'],
 ['Le', 'On'], ['Qui travaille', 'Who works'], ['À la place de', 'Instead of'], ['travaille à la place de', 'works instead of'], ['Ajouter', 'Add'],
-['Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer ma demande » dans « Ma demande ».',
- 'Your chosen vacation days aren\'t sent yet: the button below only sends the trade. For your vacation, use “Send my request” in “My request”.'],
-['Entre d\'abord ton code personnel dans « Ma demande ».', 'First enter your personal code in “My request”.'],
+['Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer mon bid » dans « Mon bid ».',
+ 'Your chosen vacation days aren\'t sent yet: the button below only sends the trade. For your vacation, use “Send my bid” in “My bid”.'],
+['Entre d\'abord ton code personnel dans « Mon bid ».', 'First enter your personal code in “My bid”.'],
 ['Envoyer l\'échange', 'Send the trade'], ['Envoyer les échanges', 'Send the trades'],
 ['Choisis la date.', 'Choose the date.'], ['Choisis les deux personnes.', 'Choose both people.'], ['Il faut deux personnes différentes.', 'It takes two different people.'],
 ['Tu dois être une des deux personnes de l\'échange.', 'You must be one of the two people in the trade.'], ['10 échanges au plus par envoi.', '10 trades at most per send.'],
 ['Envoyé à UK pour décision — rien n\'est inscrit : {r}', 'Sent to UK for a decision — nothing is entered: {r}'],
 ['Inscrit ✓ dans la grille — UK en a reçu une copie.', 'Entered ✓ in the grid — UK got a copy.'],
-['Inscrit ✓ dans la grille — UK en a reçu une copie. Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer ma demande ».',
- 'Entered ✓ in the grid — UK got a copy. Your vacation days, though, aren\'t sent yet: “Send my request”.'],
+['Inscrit ✓ dans la grille — UK en a reçu une copie. Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer mon bid ».',
+ 'Entered ✓ in the grid — UK got a copy. Your vacation days, though, aren\'t sent yet: “Send my bid”.'],
 ['Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.', 'Can\'t send right now. Try again in a few minutes, or text UK.'],
 // sending
 ['Vérification de ton code…', 'Checking your code…'], ['Vérification de l\'échange…', 'Checking the trade…'], ['Inscription dans la grille…', 'Entering it in the grid…'],
@@ -345,15 +345,15 @@ window.EN_PAGE = [
 ['Ton tour est noté…', 'Noting your turn…'], ['Inscription de tes jours…', 'Entering your days…'], ['— ne ferme pas la page', '— don\'t close the page'],
 ['C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.', 'Noted ✓ — you\'re not taking anything this round, your turn is done.'],
 ['Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.', 'Entered ✓ in the sheet — your turn is done. UK got a copy.'],
-['Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.',
- 'Received ✓ — it\'s your turn, but UK first checks the picks of the person before you. Your request will be entered automatically as soon as they\'re confirmed.'],
-['En file d\'attente ✓ — 1 personne avant toi. Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
- 'Queued ✓ — 1 person before you. Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
-['En file d\'attente ✓ — {n} personnes avant toi. Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
- 'Queued ✓ — {n} people before you. Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
-['En file d\'attente ✓ — Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
- 'Queued ✓ — Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
-['Attention : en ce moment, elle ne passerait pas', 'Careful: right now, it wouldn\'t go through'], ['({r}).', '({r}).'],
+['Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ton bid s\'inscrira tout seul dès qu\'il les aura confirmés.',
+ 'Received ✓ — it\'s your turn, but UK first checks the picks of the person before you. Your bid will be entered automatically as soon as they\'re confirmed.'],
+['Pre-bid ✓ — 1 personne avant toi. Il s\'inscrira tout seul à ton tour ; UK sera avisé s\'il ne peut plus passer.',
+ 'Pre-bid ✓ — 1 person before you. It will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['Pre-bid ✓ — {n} personnes avant toi. Il s\'inscrira tout seul à ton tour ; UK sera avisé s\'il ne peut plus passer.',
+ 'Pre-bid ✓ — {n} people before you. It will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['Pre-bid ✓ — Il s\'inscrira tout seul à ton tour ; UK sera avisé s\'il ne peut plus passer.',
+ 'Pre-bid ✓ — It will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['Attention : en ce moment, il ne passerait pas', 'Careful: right now, it wouldn\'t go through'], ['({r}).', '({r}).'],
 ['Envoyé à UK pour décision — rien n\'est inscrit : {r}. C\'est toujours ton tour.', 'Sent to UK for a decision — nothing is entered: {r}. It\'s still your turn.'],
 ['Envoyé ✓', 'Sent ✓'],
 ['Le serveur du site n\'a pas encore la nouvelle version (UK doit la déployer). Réessaie plus tard.', 'The site\'s server doesn\'t have the new version yet (UK has to deploy it). Try again later.'],
@@ -370,8 +370,8 @@ window.EN_PAGE = [
 ['Aucun jour choisi.', 'No day chosen.'], ['Aucun échange.', 'No trade.'], ['Date hors de l\'année de vacances.', 'Date outside the vacation year.'],
 ['Date mal écrite.', 'Badly written date.'], ['Initiales inconnues dans la feuille des vacances.', 'Initials not found in the vacation sheet.'],
 ['Les deux personnes doivent être du même groupe ({g}).', 'Both people must be in the same group ({g}).'],
-['Les stagiaires ne choisissent pas de vacances.', 'Trainees don\'t pick vacation.'], ['Trop d\'échanges dans un seul envoi (10 au plus).', 'Too many trades in one send (10 at most).'],
-['Trop de jours dans une seule demande.', 'Too many days in one request.'], ['Tu as déjà fini le tour {n} (✓). Reviens au prochain tour.', 'You\'ve already finished round {n} (✓). Come back next round.'],
+['Les personnes en formation ne choisissent pas de vacances.', 'People in training don\'t pick vacation.'], ['Trop d\'échanges dans un seul envoi (10 au plus).', 'Too many trades in one send (10 at most).'],
+['Trop de jours dans un seul bid.', 'Too many days in one bid.'], ['Tu as déjà fini le tour {n} (✓). Reviens au prochain tour.', 'You\'ve already finished round {n} (✓). Come back next round.'],
 ['Échange mal écrit.', 'Badly written trade.'], ['contrôleurs', 'controllers'], ['surveillants', 'supervisors'],
 ['Erreur du serveur : rien n\'est inscrit. UK a été avisé ; réessaie plus tard.', 'Server error: nothing is entered. UK has been told; try again later.'],
 ['Feuille lue à', 'Sheet read at'], ['Journée nationale de la vérité et de la réconciliation', 'National Day for Truth and Reconciliation'],
@@ -383,7 +383,7 @@ window.EN_PAGE = [
   VACANCES — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé), sur sa propre page.
   - Copie en direct de l'onglet « Sélection » du fichier « Vacances 2027-2028 St-Laurent » (lecture seule) : choix de
     chacun par tour, places restantes par jour, overlaps, tour en cours et à qui c'est le tour.
-  - « Ma demande » : la personne clique ses cycles dans sa rangée et envoie sa demande (code personnel). À son tour,
+  - « Mon bid » : la personne clique ses cycles dans sa rangée et envoie son bid (code personnel). À son tour,
     elle est inscrite tout de suite dans la feuille et son ✓ est coché ; avant son tour, elle attend en file et
     s'inscrit d'elle-même quand son tour arrive ; si elle ne respecte pas une règle, UK décide. UK reçoit une copie
     par courriel (et une ligne dans l'onglet « Demandes (site) »).
@@ -606,7 +606,7 @@ document.addEventListener('toggle', e => { const k = e.target.dataset && e.targe
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
 // the code given by the same link (…&c=1234, put in by the server) is filled in for those initials only: nothing is checked
-// or sent until « Envoyer ma demande » (the server checks the code then, as always)
+// or sent until « Envoyer mon bid » (the server checks the code then, as always)
 const CODE_URL = (() => { try { const c = String(window.CODE_URL || new URLSearchParams(location.search).get('c') || '').trim(); return /^\d{4}$/.test(c) ? c : ''; } catch (e) { return ''; } })();
 const codeDe = ini => (ini && ini === MOI_URL && CODE_URL) || (ini ? mem.get('code.' + ini) || '' : '');
 const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false,
@@ -704,7 +704,7 @@ function afficherTour() {
     (r[0] && !/à fournir/.test(r[0]) ? ` <span class="regle">· ${esc(r[0])}</span>` : '') + '<br>' +
     (qui ? `${moiTour ? '<b class="qui">C\'est ton tour !</b>' : `C'est au tour de <b class="qui">${esc(qui.i)}</b> <span class="regle">(${esc(qui.o)})</span>`}`
       : 'Tout le monde a fini ce tour.') +
-    ((g.attente || []).length ? `<br><span class="suivants">Demandes en file d'attente (inscrites automatiquement à leur tour) : ${g.attente.map(esc).join(', ')}</span>` : '') +
+    ((g.attente || []).length ? `<br><span class="suivants">Pre-bids (inscrits automatiquement à leur tour) : ${g.attente.map(esc).join(', ')}</span>` : '') +
     `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne</span></div>`;
 }
 
@@ -786,7 +786,7 @@ function afficherLegende() {
     it('background:#df6666', 'overlap utilisé') + it('background:#d9d9d9', 'congé (cycle 5-4)') +
     it('background:#d9d9d9;box-shadow:inset 0 0 0 1px #bbb', 'initiales : le collègue travaille à sa place') +
     it('background:#ff9900', 'pris sur un congé (à vérifier)') + it('background:#cfe2f3', 'à son tour') +
-    it('background:repeating-linear-gradient(135deg,#b6d7a8 0 4px,#e2f0d9 4px 8px);box-shadow:inset 0 0 0 1px #38761d', 'ma demande (pas encore dans la feuille)') +
+    it('background:repeating-linear-gradient(135deg,#b6d7a8 0 4px,#e2f0d9 4px 8px);box-shadow:inset 0 0 0 1px #38761d', 'mon bid (pas encore dans la feuille)') +
     it('background:#f4cccc', 'férié') + it('background:#ebddf7', 'relâche') + it('background:#c4ecdc', 'fin de semaine');
 }
 
@@ -831,9 +831,9 @@ function analyse() {
   if (nOvTot(cycles) > p.ov) gen.push(['x', `il te faudrait ${nOvTot(cycles)} overlaps, il t'en reste ${p.ov}`]);
   const qui = aQui(g);
   if (p.fini) gen.push(['x', 'tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour']);
-  else if (qui && qui !== p) gen.push(['w', `ce n'est pas encore ton tour (c'est au tour de ${qui.i}) : ta demande attendra en file et s'inscrira toute seule à ton tour`]);
+  else if (qui && qui !== p) gen.push(['w', `ce n'est pas encore ton tour (c'est au tour de ${qui.i}) : ce sera un pre-bid, inscrit automatiquement à ton tour`]);
   if (cycles.some(c => c.msgs.some(([n]) => n !== 'ok' && n !== 'ov')) || gen.some(([n, t]) => n === 'x' || / cycles :/.test(t)))
-    gen.push(['w', 'une demande qui ne respecte pas les règles n\'est pas inscrite : elle est envoyée à UK, qui décide']);
+    gen.push(['w', 'un bid qui ne respecte pas les règles n\'est pas inscrit : il est envoyé à UK, qui décide']);
   const ovJours = ovOk ? cycles.flatMap(c => c.ovKs).sort((x, y) => x - y) : [];
   return { g, p, cycles, gen, ovJours };
 }
@@ -842,19 +842,19 @@ const nOvTot = cycles => cycles.reduce((s, c) => s + c.ks.filter(k => etatJour(S
 function afficherDemande() {
   const el = document.getElementById('dem');
   const mm = moiDe();
-  if (!mm) { el.innerHTML = '<h2>Ma demande</h2><div class="aide">Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ta demande.</div>'; return; }
-  if (mm.gi !== S.g) { el.innerHTML = `<h2>Ma demande</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
+  if (!mm) { el.innerHTML = '<h2>Mon bid</h2><div class="aide">Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ton bid.</div>'; return; }
+  if (mm.gi !== S.g) { el.innerHTML = `<h2>Mon bid</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
   const a = analyse(), g = mm.g, r = reglesDe(g.tour);
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
   const note = garde('note');
-  let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
+  let h = `<h2>Mon bid — ${esc(S.moi)}, tour ${g.tour}</h2>` +
     `<div class="aide"><details class="regle-d" data-mem="instr"${mem.get('instr') ? ' open' : ''}><summary>Instructions</summary>` +
     `Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : ${unJour(g) ? 'le jour est ajouté' : 'les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap)'}. Clique encore pour l'enlever. ` +
-    `À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s'inscrit toute seule quand ton tour arrive.</details>` +
+    `À ton tour, ton bid est inscrit dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, c'est un pre-bid : il s'inscrit tout seul quand ton tour arrive.</details>` +
     (r[1] ? `<details class="regle-d" data-mem="regle"${mem.get('regle') ? ' open' : ''}><summary>Règle du tour ${g.tour}</summary>${esc(r[1])}</details>` : '') + '</div>' +
     boiteCode();
-  if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.</div>';
-  if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.</div>';
+  if ((g.attente || []).includes(S.moi)) h += '<div class="avis ok">Ton pre-bid est enregistré : il sera inscrit automatiquement à ton tour. Un nouveau bid le remplace.</div>';
+  if ((g.aRevoir || []).includes(S.moi)) h += '<div class="avis x">Ton pre-bid n\'a pas pu être inscrit à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ton bid.</div>';
   h += a.gen.map(([n, t]) => `<div class="avis ${n}">${esc(t)}</div>`).join('');
   if (!a.cycles.length) h += '<div class="aide" style="margin:8px 0">Aucun jour choisi pour l\'instant.</div>';
   else {
@@ -865,12 +865,12 @@ function afficherDemande() {
         `<button data-enlever="${i}">enlever</button></div>`;
     }).join('') + '</div>';
   }
-  if (a.cycles.length && !S.envoi) h += '<div class="avis w" id="pasEnvoye">Pas encore envoyée : clique « Envoyer ma demande » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.</div>';
+  if (a.cycles.length && !S.envoi) h += '<div class="avis w" id="pasEnvoye">Pas encore envoyé : clique « Envoyer mon bid » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.</div>';
   h += `<label class="t">Note pour UK (facultatif)<textarea id="note">${esc(note)}</textarea></label>` +
-    (S.ovConf ? `<div class="ovconf" id="ovconf"><b>Ta demande utilise ton overlap</b> : ${a.ovJours.map(k => esc(jour(dateDe(k)))).join(', ')} ` +
+    (S.ovConf ? `<div class="ovconf" id="ovconf"><b>Ton bid utilise ton overlap</b> : ${a.ovJours.map(k => esc(jour(dateDe(k)))).join(', ')} ` +
       `${a.ovJours.length > 1 ? 'sont' : 'est'} déjà au maximum. Il te reste ${a.p.ov} overlap${a.p.ov > 1 ? 's' : ''} pour l'année ; une fois utilisé, il ne revient pas.` +
       `<div class="actions"><button id="ovOui">Oui, utiliser mon overlap et envoyer</button><button class="sec" id="ovNon">Annuler</button></div></div>` : '') +
-    `<div class="actions"${S.ovConf ? ' hidden' : ''}><button id="envoyer"${!S.sel.size || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ma demande</button>` +
+    `<div class="actions"${S.ovConf ? ' hidden' : ''}><button id="envoyer"${!S.sel.size || S.envoi || !S.code ? ' disabled' : ''}>Envoyer mon bid</button>` +
     `<button class="sec" id="rien"${S.envoi || !S.code ? ' disabled' : ''}>Je ne prends rien à ce tour-ci</button><span class="msg ${S.msgDem[0]}" id="msg">${S.msgDem[1]}</span></div>`;
   el.innerHTML = h;
 }
@@ -880,7 +880,7 @@ function boiteCode() {
   if (S.code) return `<div class="code ok">Code personnel ✓<button class="lien" id="codeOubli" title="Effacer le code de cet appareil">oublier sur cet appareil</button></div>`;
   return `<div class="code"><label>Ton code personnel (4 chiffres, reçu de UK) :<input id="codeIn" inputmode="numeric" maxlength="4" autocomplete="off" value="${esc(S.codeSaisie)}"></label>` +
     `<button id="codeOk">Valider</button><label class="ret"><input type="checkbox" id="codeRet"${S.codeRet ? ' checked' : ''}> retenir sur cet appareil</label>` +
-    ` <span class="msg" id="codeMsg"></span><div class="aide" style="font-size:12px">Il faut ton code pour envoyer une demande ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.</div></div>`;
+    ` <span class="msg" id="codeMsg"></span><div class="aide" style="font-size:12px">Il faut ton code pour envoyer un bid ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.</div></div>`;
 }
 function validerCode() {
   const code = (S.codeSaisie || '').trim(), m = t => { const x = document.getElementById('codeMsg'); if (x) { x.className = 'msg x'; x.textContent = t; x.closest('.code').classList.add('ko'); } };
@@ -930,9 +930,9 @@ function afficherEchange() {
     h += '<div class="blocs">' + S.ech.map((l, i) => `<div class="bloc"><b>${esc(jour(l.d))}</b><span>${esc(l.qui)} travaille à la place de ${esc(l.pour)}</span>` +
       verifEchange(g, l).map(([n, t]) => n === 'ok' ? '<span class="m ok">✓</span>' : `<span class="m ${n}">${n === 'x' ? '✗' : '⚠'} ${esc(t)}</span>`).join('') +
       `<button data-echenl="${i}">enlever</button></div>`).join('') + '</div>';
-    if (S.sel.size) h += '<div class="avis w">Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer ma demande » dans « Ma demande ».</div>';
+    if (S.sel.size) h += '<div class="avis w">Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer mon bid » dans « Mon bid ».</div>';
     h += `<label class="t">Note pour UK (facultatif)<textarea id="echNote">${esc(F.note || '')}</textarea></label>` +
-      (S.code ? '' : '<div class="aide" style="margin-top:8px">Entre d\'abord ton code personnel dans « Ma demande ».</div>') +
+      (S.code ? '' : '<div class="aide" style="margin-top:8px">Entre d\'abord ton code personnel dans « Mon bid ».</div>') +
       `<div class="actions"><button id="echEnvoyer"${!S.ech.length || S.envoi || !S.code ? ' disabled' : ''}>Envoyer ${S.ech.length > 1 ? 'les échanges' : 'l\'échange'}</button>` +
       `<button class="sec" id="echFermer">Annuler</button><span class="msg ${S.msgEch[0]}" id="echMsg">${S.msgEch[1]}</span></div>`;
   }
@@ -960,7 +960,7 @@ function envoyerEchange() {
     stop(); S.envoi = false;
     if (r && r.ok) { const n = S.ech.length; S.ech = []; S.echF = { d: '', qui: '', pour: S.moi }; afficherEchange();
       if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${(r.raisons || []).join(' ; ')}`);
-      else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.` + (S.sel.size ? ' Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer ma demande ».' : '')); charger(true); } }
+      else { msg('ok', `Inscrit ✓ dans la grille — UK en a reçu une copie.` + (S.sel.size ? ' Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer mon bid ».' : '')); charger(true); } }
     else if (codeRefuse(r)) { afficherEchange(); msg('x', r.erreur); }
     else { afficherEchange(); msg('x', (r && r.erreur) || 'Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.'); }
   });
@@ -1090,9 +1090,9 @@ function envoyer(rien) {
       ['note'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; });
       S.sel.clear(); selGarder(); afficherGrille(); afficherDemande();
       if (r.statut === 'inscrite') msg('ok', rien ? 'C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.' : 'Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.');
-      else if (r.statut === 'attente' && r.confirmation) msg('ok', 'Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.');
-      else if (r.statut === 'attente') msg('ok', `En file d'attente ✓ — ${r.avant ? `${r.avant} personne${r.avant > 1 ? 's' : ''} avant toi. ` : ''}Ta demande s'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.` +
-        (r.raisons && r.raisons.length ? ` <b>Attention : en ce moment, elle ne passerait pas</b> (${esc(r.raisons.join(' ; '))}).` : ''));
+      else if (r.statut === 'attente' && r.confirmation) msg('ok', 'Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ton bid s\'inscrira tout seul dès qu\'il les aura confirmés.');
+      else if (r.statut === 'attente') msg('ok', `Pre-bid ✓ — ${r.avant ? `${r.avant} personne${r.avant > 1 ? 's' : ''} avant toi. ` : ''}Il s'inscrira tout seul à ton tour ; UK sera avisé s'il ne peut plus passer.` +
+        (r.raisons && r.raisons.length ? ` <b>Attention : en ce moment, il ne passerait pas</b> (${esc(r.raisons.join(' ; '))}).` : ''));
       else if (r.statut === 'a_decider') msg('w', `Envoyé à UK pour décision — rien n'est inscrit : ${esc((r.raisons || []).join(' ; '))}. C'est toujours ton tour.`);
       else msg('ok', 'Envoyé ✓');
       charger(true);
