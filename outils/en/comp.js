@@ -17,6 +17,8 @@
 ['{G} : {n} prévu, {r} requis', '{G}: {n} scheduled, {r} required'], ['{G} : {n} prévus, {r} requis', '{G}: {n} scheduled, {r} required'],
 ['le {g} reste au complet sans toi : comp possible sans remplaçant.', 'the {g} shift stays fully staffed without you: comp possible with no replacement.'],
 ['le {g} reste au complet sans toi : comp possible sans remplaçant ({n} de surplus).', 'the {g} shift stays fully staffed without you: comp possible with no replacement ({n} extra).'],
+['la nuit reste au complet sans toi : comp possible sans remplaçant.', 'the night shift stays fully staffed without you: comp possible with no replacement.'],
+['la nuit reste au complet sans toi : comp possible sans remplaçant ({n} de surplus).', 'the night shift stays fully staffed without you: comp possible with no replacement ({n} extra).'],
 ['Si quelqu\'un d\'autre demande le même jour, le surplus est partagé.', 'If someone else asks for the same day, the extra is shared.'],
 ['il faut quelqu\'un pour te remplacer (OT ou deux quarts de 12 h).', 'someone has to replace you (OT or two 12 h shifts).'],
 ['déjà en manque de {n} : il faudrait combler ces trous en plus de ton quart.', 'already {n} short: those holes would have to be filled on top of your shift.'],

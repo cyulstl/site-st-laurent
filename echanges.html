@@ -599,7 +599,9 @@ function cycleTravaille(w, d) {
   const n = di(d) - di(S.cyc.debut), j = ((n % 9) + 9) % 9 + 1;
   return ((j - p.k + 9) % 9) < 5;
 }
-const quartDe = (w, d) => (S.P[w] ? S.P[w].qs.filter(q => q.d === d) : []);
+// a person's shifts that count for day d: a night counts for the day it ends (like the rules, the Autobid and the Ideal
+// staff) — so a 05:45 day and a 23:00 night that start the same day are on two different days
+const quartDe = (w, d) => (S.P[w] ? S.P[w].qs.filter(q => jourDe(q) === d) : []);
 const libreCycle = (w, d) => cycleTravaille(w, d) === false && !S.P[w].cg.has(d);
 
 /* =====================================================================================
@@ -658,7 +660,7 @@ function evaluer(w, retirer, ajout) {
   if (!p) return { niv: 'x', r: [['x', 'pas dans l\'horaire']] };
   if (p.cg.has(ajout.d)) r.push(['x', 'en congé ce jour-là']);
   const base = p.qs.filter(q => q !== retirer);
-  if (base.some(q => q.d === ajout.d)) r.push(['x', 'travaille déjà ce jour-là']);
+  if (base.some(q => jourDe(q) === jourDe(ajout))) r.push(['x', 'travaille déjà ce jour-là']);
   const lim = CONFIG.restrictions[w] || [];
   if (lim.includes(ajout.g.lettre) || lim.includes(String(+ajout.a))) r.push(['x', 'ne fait pas ce genre de quart']);
   if (!r.length) {
@@ -771,7 +773,7 @@ function afficherCal() {
       const p = S.P[moi];
       if (p.cg.has(d)) inner = '<span class="q cg">congé</span>';
       else if (publie(d)) {
-        const q = quartDe(moi, d)[0];
+        const q = quartDe(moi, d).find(estCouverture) || quartDe(moi, d)[0];
         if (q) {
           const cov = estCouverture(q);
           inner = `<span class="q ${cov ? classeQ(q) : 'act'}" title="${esc(lab(q) + (q.act ? ' · ' + q.act : ''))}">${hm(q.a)}</span>`;
