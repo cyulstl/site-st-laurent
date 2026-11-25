@@ -317,8 +317,8 @@ window.EN_PAGE = [
 ['Assis jusqu\'à 45 min avant la fin du quart (30 en OT), 1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu\'à 2 h, puis 23 h).',
  'Sitting until 45 min before the end of the shift (30 on OT), 1 h sitting / 1 h break, breaks of 45 then 30 min when short-staffed; at night, 1 position (22:15 until 2:00, then 23:00).'],
 ['Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.', 'Tap a person to see their turns. The text (Text tab) can be edited before copying.'],
-[': deux côtés qui alternent d\'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu\'un de côté seulement s\'il manque une position. Quelqu\'un qui arrive en cours d\'heure s\'assoit tout de suite plutôt que d\'attendre plus d\'une heure. Pas de longues pauses : quelqu\'un qui resterait plus de 1 h 30 sans s\'asseoir s\'assoit (une position de plus, jusqu\'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).',
- ': two sides alternating every hour like the real plans (05:45 and odd hours / 06:15 and even hours, switch 13:00-13:30 / 13:30-14:00), everyone stays on their side; someone only changes sides if a position is missing. Someone arriving mid-hour sits right away rather than waiting more than an hour. No long breaks: someone who would go more than 1 h 30 without sitting sits (one more position, up to 5). In brackets, “(XV)”: optional, depending on traffic (a supervisor helping to keep 3 positions).'],
+['Deux côtés qui alternent d\'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu\'un de côté seulement s\'il manque une position. Quelqu\'un qui arrive en cours d\'heure s\'assoit tout de suite plutôt que d\'attendre plus d\'une heure. Pas de longues pauses : quelqu\'un qui resterait plus de 1 h 30 sans s\'asseoir s\'assoit (une position de plus, jusqu\'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).',
+ 'Two sides alternating every hour like the real plans (05:45 and odd hours / 06:15 and even hours, switch 13:00-13:30 / 13:30-14:00), everyone stays on their side; someone only changes sides if a position is missing. Someone arriving mid-hour sits right away rather than waiting more than an hour. No long breaks: someone who would go more than 1 h 30 without sitting sits (one more position, up to 5). In brackets, “(XV)”: optional, depending on traffic (a supervisor helping to keep 3 positions).'],
 // activities (ESS)
 ['Admin', 'Admin'], ['Coverage', 'Coverage'], ['Nat Refresher', 'Nat Refresher'],
 ['Cadre {a} px · écran {b} · tactile seulement : {c} · affichage réduit : {d} · compact : {e}', 'Frame {a} px · screen {b} · touch only: {c} · shrunk view: {d} · compact: {e}'],
@@ -553,9 +553,6 @@ window.EN_PAGE = [
   .plan-nav button { border: 1px solid var(--line); background: var(--bg); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 16px; line-height: 1; }
   .pop textarea.plan-txt { width: 100%; box-sizing: border-box; min-height: 260px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
                            padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
-  .plan-mot { display: flex; gap: 4px; margin: 0 0 8px; }
-  .plan-mot button { flex: 1; border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 14px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
-  .plan-mot button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   body.mode-plan .bar, body.mode-plan #legend { display: none; }
   body.mode-plan #view { max-width: 680px; margin: 0 auto; padding: 4px 12px 24px; box-sizing: border-box; }
   body.mode-plan #status { max-width: 680px; margin: 0 auto; padding: 6px 12px 0; box-sizing: border-box; }
@@ -1641,12 +1638,12 @@ function erreur(why) {
    Données d'exemple — initiales fictives (Q…), cycles 5-4, quelques OT, congés et trous
    ===================================================================================== */
 /* =====================================================================================
-   Plan du jour : qui est assis quand (moteur testé à part, tests/t_plan_jour.js)
+   Plan du jour : qui est assis quand — un seul calcul, planCotes (« côtés », plus bas)
    ===================================================================================== */
 /* PLAN-MOTEUR-DEBUT */
-// Plan of the Day engine: who sits when, for one operational day (first morning arrival → next morning).
+// Plan of the Day settings, shared by the engine below (planCotes starts from them).
 // people: [{ i, s, e, ot }] — s/e = shift start/end in minutes from the day's 00:00 (a night shift that starts after
-// midnight: 1440 + …). Returns { lignes: [[minute, [initials…], note]], … } — a line each time the sitters change.
+// midnight: 1440 + …). The engine returns [[minute, [initials…], note]] — a line each time the sitters change.
 const PLAN = Object.assign({
   pas: 15,                 // time step (min)
   finAvant: 45,            // stop sitting this long before the end of a regular shift
@@ -1669,172 +1666,9 @@ const PLAN = Object.assign({
   maxAssis: 90,            // never more than 1 h 30 in a row (2 h: never); if nobody else, one position fewer         // stop sitting this long before leaving the floor during the shift (leave, training…)
 }, CONFIG.plan || {});
 
-function planJour(gens, cfg) {
-  const C = Object.assign({}, PLAN, cfg || {});
-  const P0 = gens.map(g => {
-    const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
-    // a coverage window that ends before the shift (leave, training after it): off the floor 30 min before
-    const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
-      .map(([a, b]) => [a, Math.min(b < g.e ? b - C.finAvantFen : b, fin)]).filter(([a, b]) => b > a);
-    return Object.assign({}, g, { fin, blocs, nuit: g.s >= C.nuitDe });
-  }).filter(p => p.blocs.length);
-  // early nights (18:30-06:30…): an evening part in the day rotation until the night starts, then a night part that
-  // takes the night's last turn (sleep, then 02:00 → morning); the regular night shifts keep the first turns
-  const vraies = P0.filter(p => p.nuit);
-  const debutNuit = vraies.length ? Math.min(...vraies.map(p => p.s)) : C.debutNuit;
-  const P = [];
-  P0.forEach(p => {
-    if (p.nuit || p.e < C.nuitTot) { P.push(p); return; }
-    if (debutNuit - p.s >= C.minSit) P.push(Object.assign({}, p, { fin: debutNuit, blocs: [[p.s, debutNuit]], soir: true }));
-    P.push(Object.assign({}, p, { nuit: true, tot: true, depart: debutNuit }));
-  });
-  const tri = (a, b) => a.s - b.s || (a.i < b.i ? -1 : 1);
-  // supervisors (sup) sit only if needed: to keep the minimum of positions (or the night, if no controller)
-  const sups = P.filter(p => p.sup && !p.nuit).sort(tri);
-  const jour = P.filter(p => !p.nuit && !p.sup).sort(tri);
-  const nuit = (P.some(p => p.nuit && !p.sup) ? P.filter(p => p.nuit && !p.sup) : P.filter(p => p.nuit))
-    .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
-  const debN = p => p.tot ? p.depart : p.s;          // when a night person can start the night position
-  if (!jour.length && !nuit.length) return [];
-  const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
-  // the night: one position, shared in turns (2 people: 22:15 → 02:00, then 02:00 → morning)
-  const tranches = [];
-  if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
-  else if (nuit.length >= 2) {
-    const fin1 = nuit.length === 2 ? 1440 + C.coupureNuit : null, d = Math.max(debN(nuit[1]), debN(nuit[0]));
-    const bornes = [debN(nuit[0])];
-    if (fin1) bornes.push(fin1);
-    else for (let x = 1; x < nuit.length; x++) bornes.push(d + Math.round(x * (matin - d) / nuit.length / 30) * 30);
-    bornes.push(matin);
-    nuit.forEach((p, x) => tranches.push([p, bornes[x], bornes[x + 1]]));
-  }
-  const nuitAssis = t => tranches.filter(([, a, b]) => t >= a && t < b).map(([p]) => p);
-  // closers: day shifts that end at midnight or later; heureFerm = the hour mark just before the night starts (22:00)
-  const heureFerm = tranches.length ? Math.floor((tranches[0][1] - 1) / 60) * 60 : null;
-  const closer = p => heureFerm != null && !p.nuit && !p.sup && !p.soir && p.e >= C.finCloser;
-  const minPos = t => { let v = 1; for (const [de, x] of C.minPos) if ((t % 1440) >= de) v = x; return v; };
-  // day: step by step (every 15 min); sitters change only for a reason:
-  //  R1 someone must go home → replaced; R2 fewer positions than the minimum → filled;
-  //  R3 on the hour: 1 h on / 1 h off rotation, and the number of positions follows who is there;
-  //  R4 short of staff (more positions than half the people): whoever has rested 45 min (30 if really short)
-  //     replaces whoever has sat the longest, as soon as that one has sat an hour — at any quarter hour;
-  //  R5 the first relief of the morning: the positions open from the first arrival (05:45), and each one who
-  //     arrives in the first hour (06:15) relieves someone who has sat 30 min.
-  const st = new Map([...jour, ...sups].map(p => [p, { on: false, depuis: p.s, neuf: true }]));
-  const finJour = jour.length || sups.length ? Math.max(...[...jour, ...sups].map(p => p.blocs[p.blocs.length - 1][1])) : t0;
-  const lignes = [];
-  let assisMin = 0, dispoMin = 0, Pt = 0;
-  const assisTot = new Map();
-  for (let t = t0; t < Math.max(finJour, nuit.length ? matin : 0); t += C.pas) {
-    const heure = t % 60 === 0;
-    const bloc = p => p.blocs.find(([a, b]) => t >= a && t < b), reste = p => { const b = bloc(p); return b ? b[1] - t : 0; };
-    // supervisors join the rotation only when the controllers alone can't keep the minimum (with one on a break);
-    // even then, a controller is always chosen first
-    const ctrl = jour.filter(p => bloc(p));
-    const miniJ = Math.max(0, minPos(t) - (t < finJour ? nuitAssis(t).length : 0));
-    const besoinSup = sups.some(p => bloc(p)) && miniJ > (ctrl.length >= 2 ? ctrl.length - 1 : ctrl.length);
-    const dispo = besoinSup ? [...ctrl, ...sups.filter(p => bloc(p))] : ctrl;
-    const on = () => [...jour, ...sups].filter(p => st.get(p).on);
-    const assis = p => t - st.get(p).depuis, repos = p => (st.get(p).neuf ? 1e9 : t - st.get(p).depuis);
-    const court45 = p => heure && (reste(p) < C.minSitHeure || (closer(p) && t === heureFerm - 60)) ? 1 : 0;
-    const debout = () => dispo.filter(p => !st.get(p).on && reste(p) >= C.minSit).sort((a, b) => (a.sup ? 1 : 0) - (b.sup ? 1 : 0) || court45(a) - court45(b) || repos(b) - repos(a) || a.fin - b.fin);
-    // serie = start of the current unbroken sit (getting up and sitting again in the same minute doesn't break it)
-    const lever = p => st.set(p, { on: false, depuis: t, serie: st.get(p).serie, leveA: t });
-    const asseoir = p => { const o = st.get(p); st.set(p, { on: true, depuis: t, neuf: false, serie: o.leveA === t && o.serie != null ? o.serie : t }); };
-    const serie = p => t - (st.get(p).serie != null ? st.get(p).serie : t);
-    const plusLong = () => on().sort((a, b) => (b.sup ? 1 : 0) - (a.sup ? 1 : 0) || assis(b) - assis(a));
-    if (!besoinSup) sups.forEach(p => { if (st.get(p).on && (!bloc(p) || (heure && !st.get(p).releve))) st.set(p, { on: false, depuis: t }); });
-    const n = dispo.length, nn = t < finJour ? nuitAssis(t).length : 0, mini = Math.max(0, minPos(t) - nn);
-    // R1 (and at the start of the night: the evening sitters who leave within the hour get up, the night takes over)
-    const debutTranche = tranches.length && t === tranches[0][1];
-    [...jour, ...sups].forEach(p => { if (st.get(p).on && (!bloc(p) || (debutTranche && reste(p) < C.resteNuit))) lever(p); });
-    // positions: half of those here (kept near 50 % over the day), between the minimum and the maximum, and never
-    // everyone at once when 2 or more are here (one must be on a break for the others to rotate)
-    // (not again in the first hour: the 05:45 positions stay until the 06:15 relieve them, R5)
-    if ((heure && t - t0 >= 60) || on().length > n || t === t0) {
-      let c = dispoMin && assisMin / dispoMin > 0.5 ? Math.floor(n / 2) : Math.ceil(n / 2);
-      c = Math.min(C.maxPos - nn, Math.max(mini, c));
-      if (n >= 2) c = Math.min(c, n - 1);
-      Pt = Math.max(nn ? 0 : Math.min(1, n), Math.min(c, n));
-    }
-    // short of staff: more positions than half the people, forced by the minimum (or the maximum of positions)
-    const court = Pt > n / 2 && (mini > Math.floor(n / 2) || Pt > Math.ceil(n / 2)), pause = !court ? C.sieste : n / Pt >= 1.5 ? 45 : 30;
-    // R3 (on the hour) / R4 (short, any quarter hour)
-    if (heure) {
-      // everyone who has sat 45 min or more gets up; the seats are then filled by the most rested
-      // (someone who just got up sits again only if nobody else can)
-      // (at 22:00, someone with 15 min or less left who has sat an hour or less finishes the sit until the night takes
-      // over: the 1415 sits 21:00-22:15)
-      const leves = plusLong().filter(x => (assis(x) >= C.sieste - 15 || reste(x) < C.minSit) &&
-        !(t === heureFerm && reste(x) <= C.pas && assis(x) <= C.sieste));
-      leves.forEach(lever);
-      // someone who would reach 1 h 30 by the next hour (sat since the half hour) gets up too, if someone rested
-      // can take the seat (13:30-14:00, then off: like the real plans)
-      const reposes = debout().filter(x => !leves.includes(x) && repos(x) >= C.sieste - 15 && !(closer(x) && t === heureFerm - 60));
-      plusLong().filter(x => !x.sup && serie(x) + C.sieste >= C.maxAssis && !(t === heureFerm && reste(x) <= C.pas))
-        .slice(0, reposes.length).forEach(x => { lever(x); leves.push(x); });
-      // the closer takes a seat for the last stretch (22:00 → about 23:00, with the night from 22:15)
-      // (one closer: the most rested, as an extra seat; none if one is already on)
-      if (t === heureFerm && !on().some(closer)) dispo.filter(x => closer(x) && !st.get(x).on && reste(x) >= C.minSit && !leves.includes(x) && repos(x) >= 30)
-        .sort((a, b) => repos(b) - repos(a)).slice(0, 1).forEach(x => { asseoir(x); Pt = Math.max(Pt, on().length); });
-      while (on().length > Pt) lever(plusLong()[0]);
-      const tot = p => assisTot.get(p) || 0;
-      // (if nobody has rested 45 min: someone who has had 30 min — short-staffed breaks — never someone who just
-      // sat: no 2 h sits; with nobody at all, one position fewer)
-      while (on().length < Pt) {
-        const libre = x => !leves.includes(x) && !(closer(x) && t === heureFerm - 60 && on().length >= mini);
-        const c = debout().find(x => libre(x) && !court45(x) && repos(x) >= Math.min(pause, C.sieste - 15))
-          || debout().find(x => libre(x) && repos(x) >= Math.min(pause, C.sieste - 15))
-          || debout().find(x => libre(x) && repos(x) >= 30);
-        if (!c) break; asseoir(c);
-      }
-    } else if (court) {
-      for (const c of debout().filter(x => repos(x) >= pause)) {
-        const p = plusLong()[0]; if (!p || assis(p) < C.sieste) break; lever(p); asseoir(c);
-      }
-    }
-    // the cap: anyone who has sat 1 h 30 gets up, replaced by the most rested who has had 30 min or more
-    // (no controller free: a supervisor takes the seat until the next hour — supervisors sit when needed)
-    on().filter(p => serie(p) >= C.maxAssis).forEach(p => {
-      const c = debout().find(x => x !== p && repos(x) >= 30) ||
-        sups.filter(x => x !== p && bloc(x) && !st.get(x).on && repos(x) >= 30).sort((a, b) => repos(b) - repos(a))[0];
-      // nobody to take over: they get up anyway if someone else stays seated (1 position for a bit — critical — rather than 2 h)
-      if (!c) { if (on().length - 1 + nn >= 1) lever(p); return; }
-      lever(p); asseoir(c); if (c.sup && !dispo.includes(c)) st.get(c).releve = true;
-    });
-    // R2 (and the hour's new positions); never nobody while someone is here (even with less than 30 min left)
-    // (someone who just got up sits again only for the minimum, and only for a short while: 1 h 30 at most)
-    // (the closer stays free the hour before his stretch, unless needed for the minimum)
-    while (on().length < Pt && (heure || t === t0 || on().length < mini || (!on().length && !nn))) {
-      const c = debout().find(x => st.get(x).leveA !== t && !(closer(x) && t === heureFerm - 60)) ||
-        (on().length < mini || (!on().length && !nn) ? debout().find(x => serie(x) + 30 <= C.maxAssis) : null);
-      if (!c) break; asseoir(c); }
-    if (!on().length && !nn && dispo.length) asseoir(dispo.slice().sort((a, b) => reste(b) - reste(a))[0]);
-    // R6 the half-hour switch (13:30): someone who would have to leave at :45 gets up at :30, and their seat goes
-    // to whoever can't do another full hour (their last sit: 06:15 → 13:30-14:00), otherwise to the most rested
-    if (!heure && t % 30 === 0) on().filter(p => reste(p) < C.minSit).forEach(p => {
-      const L = debout().filter(x => repos(x) >= 30);
-      const c = L.filter(x => reste(x) < C.sieste + 30).sort((a, b) => reste(a) - reste(b))[0] || L[0];
-      if (c) { lever(p); asseoir(c); }
-    });
-    // R5
-    if (!heure && t > t0 && t - t0 <= 60) {
-      const arr = dispo.filter(x => x.s === t && !st.get(x).on);
-      for (const p of plusLong().filter(x => assis(x) >= 30)) { const c = arr.shift(); if (!c) break; lever(p); asseoir(c); }
-    }
-    [...jour, ...sups].forEach(p => { const s = st.get(p); if (s.neuf && !s.on && t >= p.s && t - p.s >= C.sieste) s.neuf = false; });
-    assisMin += on().length * C.pas; dispoMin += n * C.pas;
-    on().forEach(p => assisTot.set(p, (assisTot.get(p) || 0) + C.pas));
-    const qui = [...on(), ...nuitAssis(t)].map(p => p.i + (p.sup ? ' (S)' : ''));
-    const note = t < finJour && qui.length < minPos(t) ? 'court' : '';
-    const cle = qui.slice().sort().join(' ') + note;
-    if (!lignes.length || lignes[lignes.length - 1][3] !== cle) lignes.push([t, qui, note, cle]);
-  }
-  return lignes.map(([t, qui, note]) => [t, qui, note]);
-}
 /* PLAN-MOTEUR-FIN */
 /* PLAN-COTES-DEBUT */
-// Plan du jour — version « côtés » (brouillon, testée en parallèle du moteur actuel, moteur.js).
+// Plan du jour — le calcul (version « côtés », la seule depuis le 25 nov. 2026 ; l'ancienne version 1 est retirée).
 // Comme les vrais plans : deux côtés qui alternent d'heure en heure, et chacun reste sur son côté.
 //   côté X : ouverture 05:45-06:15, les heures impaires (07, 09, 11), 13:00-13:30, puis les heures paires dès 14:00
 //            (14, 16, 18, 20) et, pour le closer (1515), 22:00-23:00 avec la nuit ;
@@ -1852,7 +1686,7 @@ function planJour(gens, cfg) {
 // quelqu'un, on prend une personne qui a eu au moins 30 min de pause, sinon il y a une position de moins (« court »).
 // Pas de longues pauses non plus : quelqu'un qui resterait plus de 1 h 30 sans s'asseoir (entre deux tours, en arrivant
 // ou avant de partir) s'assoit tout de suite — une position de plus, jusqu'à 5 ; s'il est de l'autre côté, il change de côté.
-// La nuit, les nuits qui entrent tôt et le superviseur pour le minimum : mêmes règles que moteur.js.
+// La nuit, les nuits qui entrent tôt et le superviseur pour le minimum : réglages de PLAN (plus haut).
 const COTES = Object.assign({}, PLAN, {
   grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
     [660, 720, 'X'], [720, 780, 'Y'], [780, 810, 'X'], [810, 840, 'Y'], [840, 900, 'X'], [900, 960, 'Y'],
@@ -1870,7 +1704,7 @@ const COTES = Object.assign({}, PLAN, {
 
 function planCotes(gens, cfg) {
   const C = Object.assign({}, COTES, cfg || {});
-  // ---- the people (same preparation as moteur.js)
+  // ---- the people
   const P0 = gens.map(g => {
     const fin = g.e - (g.ot ? C.finAvantOT : C.finAvant);
     const blocs = (g.fen && g.fen.length ? g.fen : [[g.s, g.e]])
@@ -1892,7 +1726,7 @@ function planCotes(gens, cfg) {
     .sort((a, b) => (a.tot ? 1 : 0) - (b.tot ? 1 : 0) || tri(a, b));
   if (!jour.length && !nuit.length) return [];
   const t0 = jour.length ? jour[0].s : nuit[0].s, matin = t0 + 1440;
-  // ---- the night (as moteur.js)
+  // ---- the night
   const debN = p => p.tot ? p.depart : p.s;
   const tranches = [];
   if (nuit.length === 1) tranches.push([nuit[0], debN(nuit[0]), matin]);
@@ -2054,11 +1888,10 @@ function gensPlan(day) {
 S.planJour = null; S.planSans = {};
 S.planVue = (() => { try { return localStorage.getItem('planVue') || 'pos'; } catch (x) { return 'pos'; } })();
 S.planMoi = null;
-S.planMoteur = (() => { try { return localStorage.getItem('planMoteur') === 'cotes' ? 'cotes' : 'actuel'; } catch (x) { return 'actuel'; } })();
-// the plan's lines for a day, with the chosen engine and without the people unticked
+// the plan's lines for a day, without the people unticked
 function lignesDuPlan(day) {
   const { pris } = gensPlan(day), sans = S.planSans[day] || [];
-  return (S.planMoteur === 'cotes' ? planCotes : planJour)(pris.filter(p => !sans.includes(p.i)));
+  return planCotes(pris.filter(p => !sans.includes(p.i)));
 }
 // 'DW' | 'XV (S)' | '(XV)' → { i, opt }
 const nomPlan = s => ({ i: s.replace(/^\(|\)$/g, '').replace(/ \(S\)$/, ''), opt: /^\(/.test(s), sup: / \(S\)$/.test(s) });
@@ -2139,8 +1972,6 @@ function htmlDuPlan(day) {
     `<div class="plan-beta">En test : un brouillon calculé à partir de l'horaire ESS, pas le plan officiel. Le superviseur décide.</div>` +
     `<div class="plan-nav"><button data-plan="prec" aria-label="Jour précédent">&#8249;</button><b>${esc(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>` +
     `<button data-plan="suiv" aria-label="Jour suivant">&#8250;</button></div>` +
-    `<div class="plan-mot">${[['actuel', 'Version 1'], ['cotes', 'Version 2']].map(([v, n]) =>
-      `<button data-plan="mot" data-v="${v}"${S.planMoteur === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
     `<div class="plan-vues">${[['pos', 'Positions'], ['pers', 'Par personne'], ['txt', 'Texte']].map(([v, n]) =>
       `<button data-plan="vue" data-v="${v}"${S.planVue === v ? ' class="on"' : ''}>${n}</button>`).join('')}</div>` +
     `<div id="planVue">${vueDuPlan(day)}</div>` +
@@ -2151,10 +1982,10 @@ function htmlDuPlan(day) {
     `<div class="plan-aide">${nb} personne${nb > 1 ? 's' : ''} comptée${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Superviseurs (S) : assis seulement s'il le faut pour garder le minimum de positions. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
     `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
     `Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.` +
-    (S.planMoteur === 'cotes' ? ` <b>Version 2</b> : deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
+    ` <span>Deux côtés qui alternent d'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, ` +
       `bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu'un de côté seulement s'il manque une position. ` +
       `Quelqu'un qui arrive en cours d'heure s'assoit tout de suite plutôt que d'attendre plus d'une heure. ` +
-      `Pas de longues pauses : quelqu'un qui resterait plus de 1 h 30 sans s'asseoir s'assoit (une position de plus, jusqu'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).` : '') + `</div>`;
+      `Pas de longues pauses : quelqu'un qui resterait plus de 1 h 30 sans s'asseoir s'assoit (une position de plus, jusqu'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).</span></div>`;
   return html;
 }
 // (the calendar no longer has a « Plan du jour » button: the plan has its own page, plan.html)
@@ -2164,7 +1995,6 @@ const clicPlan = e => {
   if (a === 'prec' || a === 'suiv') { S.planJour = addDays(day, a === 'prec' ? -1 : 1); ouvrirPlan(); }
   else if (a === 'vue') { S.planVue = b.dataset.v; try { localStorage.setItem('planVue', S.planVue); } catch (x) { /* not kept */ } ouvrirPlan(); }
   else if (a === 'moi') { S.planMoi = S.planMoi === b.dataset.i ? null : b.dataset.i; document.getElementById('planVue').innerHTML = vueDuPlan(day); }
-  else if (a === 'mot') { S.planMoteur = b.dataset.v; try { localStorage.setItem('planMoteur', S.planMoteur); } catch (x) { /* not kept */ } ouvrirPlan(); }
   else if (a === 'qui') {
     const l = new Set(S.planSans[day] || []); if (b.checked) l.delete(b.value); else l.add(b.value);
     S.planSans[day] = [...l]; document.getElementById('planVue').innerHTML = vueDuPlan(day);
