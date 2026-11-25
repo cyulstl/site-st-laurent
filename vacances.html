@@ -80,6 +80,8 @@
   td.j.off { background: #d9d9d9; }                /* day off (5-4 cycle) */
   td.j.cj { background: #fff1cc; }                 /* day at the maximum */
   td.j.cr { background: #df6666; }                 /* over the maximum (overlap used) */
+  td.j.cj.off { background: #e8cd8f; }             /* day at the maximum, but a day off in this person's 5-4 cycle */
+  td.j.cr.off { background: #b84b4b; }             /* over the maximum, day off */
   td.j.v { background: #6aa84f; font-weight: 700; }
   td.j.vt { background: #df6666; font-weight: 700; }
   td.j.vm { background: #df6666; color: #fff; font-weight: 700; }   /* this person's overlap */
@@ -369,7 +371,7 @@ function afficherGrille() {
       } else {
         const pq = p.cy && base === false ? pourQui(g, p, k) : null;
         if (pq) { cls = 'pour'; txt = esc(pq.i); titre = `${p.i} travaille pour ${pq.i}`; }
-        else cls = col || (p.cy && base === false ? 'off' : tour ? 'tr' : '');
+        else cls = col ? col + (p.cy && base === false ? ' off' : '') : p.cy && base === false ? 'off' : tour ? 'tr' : '';   // full days still show the 5-4 cycle
       }
       if (moi && !v && travaille(g, p, k)) {
         cls += ' cl';
@@ -395,7 +397,7 @@ function afficherGrille() {
 function afficherLegende() {
   const it = (style, t) => `<span><i style="${style}"></i>${t}</span>`;
   document.getElementById('leg').innerHTML =
-    it('background:#6aa84f', 'vacances (le chiffre = le tour)') + it('background:#fff1cc;box-shadow:inset 0 0 0 1px #f1d98a', 'jour au maximum') +
+    it('background:#6aa84f', 'vacances (le chiffre = le tour)') + it('background:linear-gradient(90deg,#fff1cc 50%,#e8cd8f 50%);box-shadow:inset 0 0 0 1px #f1d98a', 'jour au maximum (plus foncé : en congé)') +
     it('background:#df6666', 'overlap utilisé') + it('background:#d9d9d9', 'congé (cycle 5-4)') +
     it('background:#d9d9d9;box-shadow:inset 0 0 0 1px #bbb', 'initiales : le collègue travaille à sa place') +
     it('background:#ff9900', 'pris sur un congé (à vérifier)') + it('background:#cfe2f3', 'à son tour') +
