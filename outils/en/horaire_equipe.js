@@ -1,14 +1,14 @@
 ['Horaire St-Laurent', 'St-Laurent schedule'], ['Plan du jour — St-Laurent', 'Daily plan — St-Laurent'],
 ['Précédent', 'Previous'], ['Suivant', 'Next'], ['Choisir les personnes à afficher', 'Choose who to show'],
 ['Tout le monde ▾', 'Everyone ▾'], ['Tout le monde', 'Everyone'], ['Tous', 'All'], ['{n} personnes ▾', '{n} people ▾'], ['{n} personnes', '{n} people'],
-['Shifts en banque', 'Bank shifts'], ['Congés', 'Days off'], ['Vue', 'View'], ['Mois', 'Month'], ['Semaine', 'Week'], ['Sem.', 'Wk'], ['Jour', 'Day'],
+['Shifts en banque', 'Shifts in the bank'], ['Congés', 'Leave'], ['Vue', 'View'], ['Mois', 'Month'], ['Semaine', 'Week'], ['Sem.', 'Wk'], ['Jour', 'Day'],
 ['Ce que veulent dire les couleurs', 'What the colours mean'], ['Légende', 'Legend'],
 ['Ouvrir l\'horaire dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the schedule in a new tab, full screen width'],
 ['Plein écran', 'Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
 // shift groups and kinds
 ['Nooner', 'Nooner'], ['Soir', 'Evening'], ['Nuit', 'Night'], ['jour', 'day'], ['nooner', 'nooner'], ['soir', 'evening'], ['nuit', 'night'],
 ['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['Stagiaire', 'Trainee'], ['stagiaire', 'trainee'],
-['quart prolongé', 'extended shift'], ['Quart prolongé', 'Extended shift'], ['$ Temps supplémentaire', '$ Overtime'],
+['quart prolongé', 'extended shift'], ['Quart prolongé', 'Extended shift'], ['$ Temps supplémentaire', '$ OT'],
 ['autre activité', 'other activity'], ['Autre activité', 'Other activity'], ['Formation OJT', 'OJT training'],
 // hover texts
 ['commence à minuit (nuit du {a} au {b})', 'starts at midnight (night of {a} to {b})'],
@@ -18,12 +18,12 @@
 ['Relâche : {r}', 'Spring break: {r}'], ['Relâche scolaire', 'School spring break'], ['Voir la journée', 'See the day'],
 // month / week / day views
 ['fin de nuit', 'end of night'], ['à minuit', 'at midnight'], ['· à minuit', '· at midnight'],
-['Shift en banque : {a} - {b} {d}', 'Bank shift: {a} - {b} {d}'], ['Shift en banque partiel : {a} - {b} {d}', 'Partial bank shift: {a} - {b} {d}'],
-['Libre {c}', 'Open {c}'], ['Libre {a} - {b}', 'Open {a} - {b}'], ['Libre', 'Open'], ['Libres', 'Open'], ['Partiel', 'Partial'],
+['Shift en banque : {a} - {b} {d}', 'Shift in the bank: {a} - {b} {d}'], ['Shift en banque partiel : {a} - {b} {d}', 'Partial shift in the bank: {a} - {b} {d}'],
+['Libre {c}', 'Avail. {c}'], ['Libre {a} - {b}', 'Avail. {a} - {b}'], ['Libre', 'Avail.'], ['Libres', 'Avail.'], ['Partiel', 'Partial'],
 ['complets / partiels', 'full / partial'], ['Complet {a} - {b} {d}', 'Full {a} - {b} {d}'], ['Partiel {a} - {b} {d}', 'Partial {a} - {b} {d}'],
-['Congé', 'Off'], ['congé', 'off'], ['{ini} en congé', '{ini} off'], ['En congé', 'Off'], ['+ {n} de plus', '+ {n} more'],
+['Congé', 'Leave'], ['congé', 'leave'], ['{ini} en congé', '{ini} on leave'], ['En congé', 'On leave'], ['+ {n} de plus', '+ {n} more'],
 ['Aucun quart ce jour-là.', 'No shifts that day.'], ['Horaire pas encore publié pour cette date.', 'Schedule not published yet for this date.'],
-['1 quart — {x}', '1 shift — {x}'], ['{n} quarts — {x}', '{n} shifts — {x}'], ['En congé : {x}', 'Off: {x}'],
+['1 quart — {x}', '1 shift — {x}'], ['{n} quarts — {x}', '{n} shifts — {x}'], ['En congé : {x}', 'On leave: {x}'],
 ['{d} · {f} (férié payé 1,5x) · relâche scolaire', '{d} · {f} (stat holiday paid 1.5x) · school spring break'],
 ['{d} · {f} (férié payé 1,5x)', '{d} · {f} (stat holiday paid 1.5x)'], ['{d} · relâche scolaire', '{d} · school spring break'],
 // popups
@@ -36,7 +36,7 @@
 // legend
 ['Autre activité (formation…) : texte après les initiales', 'Other activity (training…): text after the initials'],
 ['Deux couleurs = quart prolongé ou partagé entre deux activités', 'Two colours = extended shift, or split between two activities'],
-['Libre complet (8 h 30 en OT)', 'Full open shift (8 h 30 of OT)'], ['Libre partiel', 'Partial open shift'], ['Hachuré = pas encore publié', 'Hatched = not published yet'],
+['Libre complet (8 h 30 en OT)', 'Avail. full (8 h 30 of OT)'], ['Libre partiel', 'Avail. partial'], ['Hachuré = pas encore publié', 'Hatched = not published yet'],
 ['pâli = fin d\'une nuit commencée la veille', 'faded = end of a night that started the day before'],
 ['Gris = congé du cycle 5-4 de la personne choisie', 'Grey = day off in the chosen person\'s 5-4 cycle'],
 ['Date en rouge = férié payé 1,5x', 'Date in red = stat holiday paid 1.5x'],
