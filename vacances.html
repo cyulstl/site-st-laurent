@@ -230,10 +230,14 @@ const mem = {
 document.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.mem; if (k) mem.set(k, e.target.open ? '1' : ''); }, true);
 const MOI_URL = (() => { try { return String(window.MOI_URL || new URLSearchParams(location.search).get('moi') || '').trim().toUpperCase(); } catch (e) { return ''; } })();
 if (/^[A-Z]{2,3}$/.test(MOI_URL)) mem.set('moi', MOI_URL);
+// the code given by the same link (…&c=1234, put in by the server) is filled in for those initials only: nothing is checked
+// or sent until « Envoyer ma demande » (the server checks the code then, as always)
+const CODE_URL = (() => { try { const c = String(window.CODE_URL || new URLSearchParams(location.search).get('c') || '').trim(); return /^\d{4}$/.test(c) ? c : ''; } catch (e) { return ''; } })();
+const codeDe = ini => (ini && ini === MOI_URL && CODE_URL) || (ini ? mem.get('code.' + ini) || '' : '');
 const S = { d: null, g: 0, moi: mem.get('moi') || '', sel: new Set(), unParUn: {}, envoi: false,
   replie: mem.get('replie') ? mem.get('replie') === '1' : innerWidth <= 600 };   // frozen columns folded to Ini. only
 // personal code (4 digits from UK), required to send anything; kept on this device if « retenir » is ticked
-S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeRet = true; S.codeSaisie = '';
+S.code = codeDe(S.moi); S.codeRet = true; S.codeSaisie = '';
 S.msgDem = ['', '']; S.msgEch = ['', ''];           // last result shown under the buttons (kept when the grid reloads)
 
 /* ---------- derived data ---------- */
@@ -671,7 +675,7 @@ document.addEventListener('keydown', e => { if (e.target.id === 'codeIn' && e.ke
 document.addEventListener('change', e => {
   if (e.target.id === 'moi') {
     S.moi = e.target.value; mem.set('moi', S.moi); selReprendre(); S.ech = []; S.echF = { d: '', qui: '', pour: S.moi };
-    S.code = S.moi ? mem.get('code.' + S.moi) || '' : ''; S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
+    S.code = codeDe(S.moi); S.codeSaisie = ''; S.msgDem = ['', '']; S.msgEch = ['', ''];
     const mm = moiDe(); if (mm) S.g = mm.gi;
     afficher();
   } else if (e.target.id === 'unParUn') { const mm = moiDe(); if (mm) S.unParUn[mm.g.tour] = e.target.checked; afficherMode(); afficherDemande(); }
