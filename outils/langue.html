@@ -1,0 +1,209 @@
+<!-- LANGUE:debut — FR/EN switch, the same block in every page (source: outils/langue.html, copied in by outils/langue.py).
+     The page stays written in French; in English, every piece of text shown is looked up in the page's list
+     (window.EN_PAGE, just below this block) and replaced. {x} in a list entry = a part that changes (number, initials,
+     date…), carried over to the English: {ini…} = initials only, {n…} = a number only, any other name = any text. Dates use LOC() ('fr-CA' / 'en-CA'). The choice is kept on the device;
+     …&lang=en in the link (texts and emails to a person set to English) opens the page in English. -->
+<style>
+  #stlLang { position: absolute; top: 6px; right: 8px; z-index: 60; display: flex; border: 1px solid #dadce0; border-radius: 14px;
+             overflow: hidden; background: #fff; font: 600 11.5px/1 Roboto, "Segoe UI", Arial, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  #stlLang button { border: 0; background: none; margin: 0; padding: 5px 8px; cursor: pointer; color: #5f6368; font: inherit; letter-spacing: .03em; }
+  #stlLang button.on { background: #1a73e8; color: #fff; cursor: default; }
+  #stlLang button:not(.on):hover { background: #f1f3f4; }
+  #stlLang.dans { position: static; flex: none; align-self: center; margin-left: 6px; box-shadow: none; }
+  #stlLang.rangee { position: relative; top: 0; right: 0; width: max-content; margin: 6px 8px 2px auto; box-shadow: none; }
+  @media (max-width: 760px) {   /* phones: right end of the title row; the status line goes under it */
+    [data-langue-ici] > #stlLang.dans { order: 2; margin-left: auto; }
+    [data-langue-ici] > .etat { order: 3; }
+  }
+  @media print { #stlLang { display: none; } }
+</style>
+<script>
+(function () {
+  'use strict';
+  var K = 'stl.lang';
+  function lsGet() { try { return localStorage.getItem(K); } catch (e) { return null; } }
+  function lsSet(v) { try { localStorage.setItem(K, v); } catch (e) { /* no storage: this visit only */ } }
+  var q = null;
+  try { q = window.LANG_URL || new URLSearchParams(location.search).get('lang'); } catch (e) { /* none */ }
+  if (q === 'en' || q === 'fr') lsSet(q);
+  window.LANG = q === 'en' || q === 'fr' ? q : lsGet() === 'en' ? 'en' : 'fr';
+  window.LOC = function () { return window.LANG === 'en' ? 'en-CA' : 'fr-CA'; };
+  document.documentElement.lang = window.LANG;
+
+  // ---- the list: exact sentences, sentences with {parts}, and phrases also replaced inside longer text
+  var COMMUN = [
+    ['Aujourd\'hui', 'Today'], ['Chargement…', 'Loading…'], ['Fermer', 'Close'], ['Annuler', 'Cancel'], ['oui', 'yes'], ['non', 'no'],
+    ['Contrôleurs', 'Controllers'], ['Superviseurs', 'Supervisors'], ['Contrôleur', 'Controller'], ['Superviseur', 'Supervisor'],
+  ];
+  var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  var norm = function (s) { return String(s).replace(/\s+/g, ' ').trim(); };
+  var exact, pats, phrMap, phrRe, memo, nLu = -1;
+  function compiler() {
+    nLu = (window.EN_PAGE || []).length;
+    exact = new Map(); pats = []; phrMap = new Map(); memo = new Map();
+    COMMUN.concat(window.EN_PAGE || []).forEach(function (e) {
+      var k = norm(e[0]), en = e[1];
+      if (/\{\w+\}/.test(k)) {
+        var noms = [];
+        var src = k.split(/(\{\w+\})/).map(function (p) {
+          var m = /^\{(\w+)\}$/.exec(p);
+          if (m) { noms.push(m[1]); return /^ini/.test(m[1]) ? '([A-Z]{2,3})' : /^n\d*$/.test(m[1]) ? '([-+−]?\\d+(?:[.,]\\d+)?)' : '([\\s\\S]+?)'; }
+          return esc(p);
+        }).join('');
+        pats.push({ re: new RegExp('^' + src + '$'), noms: noms, en: en, poids: k.replace(/\{\w+\}/g, '').length });
+      } else {
+        exact.set(k, en);
+        if (k.indexOf(' ') > 0 && k.length >= 6) phrMap.set(k, en);
+      }
+    });
+    pats.sort(function (a, b) { return b.poids - a.poids; });
+    var ph = Array.from(phrMap.keys()).sort(function (a, b) { return b.length - a.length; }).map(esc);
+    phrRe = ph.length ? new RegExp('(^|[^0-9A-Za-zÀ-ÿ_])(' + ph.join('|') + ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g') : null;
+  }
+  // French day and month names inside a changing part (dates written by the server): replaced word for word
+  var DATES = { 'dim.': 'Sun', 'lun.': 'Mon', 'mar.': 'Tue', 'mer.': 'Wed', 'jeu.': 'Thu', 'ven.': 'Fri', 'sam.': 'Sat',
+    dimanche: 'Sunday', lundi: 'Monday', mardi: 'Tuesday', mercredi: 'Wednesday', jeudi: 'Thursday', vendredi: 'Friday', samedi: 'Saturday',
+    'janv.': 'Jan', 'févr.': 'Feb', mars: 'Mar', 'avr.': 'Apr', mai: 'May', juin: 'Jun', 'juil.': 'Jul', 'août': 'Aug', 'sept.': 'Sep',
+    'oct.': 'Oct', 'nov.': 'Nov', 'déc.': 'Dec', janvier: 'January', 'février': 'February', avril: 'April', juillet: 'July',
+    septembre: 'September', octobre: 'October', novembre: 'November', 'décembre': 'December' };
+  var dateRe = new RegExp('(^|[^0-9A-Za-zÀ-ÿ_.])(' + Object.keys(DATES).sort(function (a, b) { return b.length - a.length; }).map(esc).join('|') +
+    ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g');
+  function part(v, n) {                 // one changing part: its own translation, else each « ; » item, else dates only
+    if (n >= 3) return v;
+    var t = trad(v, n + 1);
+    if (t != null) return t;
+    if (v.indexOf(' ; ') > 0) return v.split(' ; ').map(function (x) { return part(x, n); }).join('; ');
+    return v.replace(dateRe, function (x, a, b) { return a + DATES[b]; });
+  }
+  function trad(s, n) {
+    if (!exact || nLu !== (window.EN_PAGE || []).length) compiler();
+    var k = norm(s);
+    if (k === ':' && /^\s/.test(s)) return ':' + /\s*$/.exec(s)[0];      // « Mise à jour : » → « Update: »
+    if (!k || !/[A-Za-zÀ-ÿ]/.test(k)) return null;
+    var r;
+    if (!n && memo.has(k)) r = memo.get(k);
+    else {
+      r = exact.get(k);
+      if (r === undefined) for (var i = 0; i < pats.length; i++) {
+        var p = pats[i], m = p.re.exec(k);
+        if (!m) continue;
+        r = p.en.replace(/\{(\w+)\}/g, function (x, nom) {
+          var j = p.noms.indexOf(nom);
+          return j < 0 ? x : part(m[j + 1], n);
+        });
+        break;
+      }
+      if (r === undefined && phrRe && /[a-zà-ÿ]/.test(k)) {
+        var chg = false;
+        var t2 = k.replace(phrRe, function (x, a, b) { chg = true; return a + phrMap.get(b); });
+        if (chg) r = t2;
+      }
+      if (r === undefined) r = null;
+      if (!n) memo.set(k, r);
+    }
+    if (r == null) return null;
+    var deb = /^\s*/.exec(s)[0];
+    if (/^[:;!?]/.test(r)) deb = '';                       // French space before « : » — none in English
+    return deb + r + /\s*$/.exec(s)[0];
+  }
+  // for code that needs a sentence outside the page (a dialog, the tab title): T('…') gives it in the current language
+  window.T = function (s) { if (window.LANG !== 'en') return s; var t = trad(s, 0); return t == null ? s : t; };
+
+  // ---- the page: every text and a few attributes; never what people type, nor marked parts (data-notr)
+  var ORIG = new WeakMap(), AORIG = new WeakMap();
+  var ATTR = ['title', 'placeholder', 'aria-label', 'alt'];
+  var SAUTE = /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/;
+  var bouton = function (el) { return el.tagName === 'INPUT' && /^(button|submit|reset)$/i.test(el.type); };
+  function saute(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) if (SAUTE.test(e.tagName) || e.hasAttribute('data-notr') || e.isContentEditable) return true;
+    return false;
+  }
+  function texte(nd) {
+    var v = nd.nodeValue, o = ORIG.get(nd);
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) { if (o) ORIG.delete(nd); return; }
+    ORIG.set(nd, [v, en]); nd.nodeValue = en;
+  }
+  function un(el, a) {
+    var v = el.getAttribute(a);
+    if (v == null) return;
+    var m = AORIG.get(el), o = m && m[a];
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) return;
+    if (!m) AORIG.set(el, m = {});
+    m[a] = [v, en]; el.setAttribute(a, en);
+  }
+  function attrs(el) {
+    for (var i = 0; i < ATTR.length; i++) if (el.hasAttribute(ATTR[i])) un(el, ATTR[i]);
+    if (bouton(el)) un(el, 'value');
+  }
+  function parcourir(r) {
+    if (!r) return;
+    if (r.nodeType === 3) { if (!saute(r.parentElement)) texte(r); return; }
+    if (r.nodeType !== 1) return;
+    if (saute(r)) { if (r.tagName === 'TEXTAREA' && !saute(r.parentElement)) attrs(r); return; }
+    attrs(r);
+    var w = document.createTreeWalker(r, 5, { acceptNode: function (n) {
+      if (n.nodeType !== 1 || !(SAUTE.test(n.tagName) || n.hasAttribute('data-notr') || n.isContentEditable)) return 1;
+      if (n.tagName === 'TEXTAREA' && !n.hasAttribute('data-notr')) attrs(n);       // its placeholder, never what's typed
+      return 2; } });
+    for (var n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) texte(n); else attrs(n); }
+  }
+  function remettre() {
+    var w = document.createTreeWalker(document.documentElement, 5);
+    for (var n = w.currentNode; n; n = w.nextNode()) {
+      if (n.nodeType === 3) { var o = ORIG.get(n); if (o) { if (n.nodeValue === o[1]) n.nodeValue = o[0]; ORIG.delete(n); } }
+      else { var m = AORIG.get(n); if (m) { for (var a in m) if (n.getAttribute(a) === m[a][1]) n.setAttribute(a, m[a][0]); AORIG.delete(n); } }
+    }
+  }
+  new MutationObserver(function (ms) {
+    if (window.LANG !== 'en') return;
+    ms.forEach(function (m) {
+      if (m.type === 'childList') m.addedNodes.forEach(parcourir);
+      else if (m.type === 'characterData') { if (!saute(m.target.parentElement)) texte(m.target); }
+      else if (m.target.nodeType === 1 && !saute(m.target.parentElement) && !/^(SCRIPT|STYLE)$/.test(m.target.tagName) &&
+        (m.attributeName !== 'value' || bouton(m.target))) un(m.target, m.attributeName);
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true,
+    attributeFilter: ATTR.concat('value') });
+
+  // ---- the switch, upper right
+  function maj() {
+    var d = document.getElementById('stlLang');
+    if (d) Array.prototype.forEach.call(d.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.getAttribute('data-l') === window.LANG); });
+  }
+  function poser(l) {
+    if (l === window.LANG) return;
+    window.LANG = l; lsSet(l); document.documentElement.lang = l; maj();
+    if (l === 'fr') remettre();
+    try { if (typeof window.surLangue === 'function') window.surLangue(l); } catch (e) { console.log('surLangue : ' + e); }
+    if (l === 'en') parcourir(document.documentElement);
+  }
+  window.poserLangue = poser;
+  // the page's HTML in French (for « Plein écran », which writes the page into a new tab: it then shows in the chosen language)
+  window.htmlFr = function () {
+    if (window.LANG !== 'en') return document.documentElement.outerHTML;
+    remettre();
+    var h = document.documentElement.outerHTML;
+    parcourir(document.documentElement);
+    return h;
+  };
+  function boutons() {
+    if (document.getElementById('stlLang') || !document.body) return;
+    var d = document.createElement('div');
+    d.id = 'stlLang'; d.setAttribute('data-notr', ''); d.setAttribute('translate', 'no');
+    d.innerHTML = '<button type="button" data-l="fr" title="Français">FR</button><button type="button" data-l="en" title="English">EN</button>';
+    d.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) poser(b.getAttribute('data-l')); });
+    var ici = document.querySelector('[data-langue-ici]');     // the page's own header row, if it has one (and it's shown)
+    if (ici && !ici.getClientRects().length) ici = null;
+    if (ici) { d.className = 'dans'; ici.appendChild(d); }
+    else { d.className = 'rangee'; document.body.insertBefore(d, document.body.firstChild); }   // a thin row of its own, upper right
+    maj();
+  }
+  function init() { boutons(); if (window.LANG === 'en') parcourir(document.documentElement); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<!-- LANGUE:fin -->

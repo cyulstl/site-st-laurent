@@ -4,6 +4,381 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vacances — St-Laurent</title>
+<!-- LANGUE:debut — FR/EN switch, the same block in every page (source: outils/langue.html, copied in by outils/langue.py).
+     The page stays written in French; in English, every piece of text shown is looked up in the page's list
+     (window.EN_PAGE, just below this block) and replaced. {x} in a list entry = a part that changes (number, initials,
+     date…), carried over to the English: {ini…} = initials only, {n…} = a number only, any other name = any text. Dates use LOC() ('fr-CA' / 'en-CA'). The choice is kept on the device;
+     …&lang=en in the link (texts and emails to a person set to English) opens the page in English. -->
+<style>
+  #stlLang { position: absolute; top: 6px; right: 8px; z-index: 60; display: flex; border: 1px solid #dadce0; border-radius: 14px;
+             overflow: hidden; background: #fff; font: 600 11.5px/1 Roboto, "Segoe UI", Arial, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  #stlLang button { border: 0; background: none; margin: 0; padding: 5px 8px; cursor: pointer; color: #5f6368; font: inherit; letter-spacing: .03em; }
+  #stlLang button.on { background: #1a73e8; color: #fff; cursor: default; }
+  #stlLang button:not(.on):hover { background: #f1f3f4; }
+  #stlLang.dans { position: static; flex: none; align-self: center; margin-left: 6px; box-shadow: none; }
+  #stlLang.rangee { position: relative; top: 0; right: 0; width: max-content; margin: 6px 8px 2px auto; box-shadow: none; }
+  @media (max-width: 760px) {   /* phones: right end of the title row; the status line goes under it */
+    [data-langue-ici] > #stlLang.dans { order: 2; margin-left: auto; }
+    [data-langue-ici] > .etat { order: 3; }
+  }
+  @media print { #stlLang { display: none; } }
+</style>
+<script>
+(function () {
+  'use strict';
+  var K = 'stl.lang';
+  function lsGet() { try { return localStorage.getItem(K); } catch (e) { return null; } }
+  function lsSet(v) { try { localStorage.setItem(K, v); } catch (e) { /* no storage: this visit only */ } }
+  var q = null;
+  try { q = window.LANG_URL || new URLSearchParams(location.search).get('lang'); } catch (e) { /* none */ }
+  if (q === 'en' || q === 'fr') lsSet(q);
+  window.LANG = q === 'en' || q === 'fr' ? q : lsGet() === 'en' ? 'en' : 'fr';
+  window.LOC = function () { return window.LANG === 'en' ? 'en-CA' : 'fr-CA'; };
+  document.documentElement.lang = window.LANG;
+
+  // ---- the list: exact sentences, sentences with {parts}, and phrases also replaced inside longer text
+  var COMMUN = [
+    ['Aujourd\'hui', 'Today'], ['Chargement…', 'Loading…'], ['Fermer', 'Close'], ['Annuler', 'Cancel'], ['oui', 'yes'], ['non', 'no'],
+    ['Contrôleurs', 'Controllers'], ['Superviseurs', 'Supervisors'], ['Contrôleur', 'Controller'], ['Superviseur', 'Supervisor'],
+  ];
+  var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  var norm = function (s) { return String(s).replace(/\s+/g, ' ').trim(); };
+  var exact, pats, phrMap, phrRe, memo, nLu = -1;
+  function compiler() {
+    nLu = (window.EN_PAGE || []).length;
+    exact = new Map(); pats = []; phrMap = new Map(); memo = new Map();
+    COMMUN.concat(window.EN_PAGE || []).forEach(function (e) {
+      var k = norm(e[0]), en = e[1];
+      if (/\{\w+\}/.test(k)) {
+        var noms = [];
+        var src = k.split(/(\{\w+\})/).map(function (p) {
+          var m = /^\{(\w+)\}$/.exec(p);
+          if (m) { noms.push(m[1]); return /^ini/.test(m[1]) ? '([A-Z]{2,3})' : /^n\d*$/.test(m[1]) ? '([-+−]?\\d+(?:[.,]\\d+)?)' : '([\\s\\S]+?)'; }
+          return esc(p);
+        }).join('');
+        pats.push({ re: new RegExp('^' + src + '$'), noms: noms, en: en, poids: k.replace(/\{\w+\}/g, '').length });
+      } else {
+        exact.set(k, en);
+        if (k.indexOf(' ') > 0 && k.length >= 6) phrMap.set(k, en);
+      }
+    });
+    pats.sort(function (a, b) { return b.poids - a.poids; });
+    var ph = Array.from(phrMap.keys()).sort(function (a, b) { return b.length - a.length; }).map(esc);
+    phrRe = ph.length ? new RegExp('(^|[^0-9A-Za-zÀ-ÿ_])(' + ph.join('|') + ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g') : null;
+  }
+  // French day and month names inside a changing part (dates written by the server): replaced word for word
+  var DATES = { 'dim.': 'Sun', 'lun.': 'Mon', 'mar.': 'Tue', 'mer.': 'Wed', 'jeu.': 'Thu', 'ven.': 'Fri', 'sam.': 'Sat',
+    dimanche: 'Sunday', lundi: 'Monday', mardi: 'Tuesday', mercredi: 'Wednesday', jeudi: 'Thursday', vendredi: 'Friday', samedi: 'Saturday',
+    'janv.': 'Jan', 'févr.': 'Feb', mars: 'Mar', 'avr.': 'Apr', mai: 'May', juin: 'Jun', 'juil.': 'Jul', 'août': 'Aug', 'sept.': 'Sep',
+    'oct.': 'Oct', 'nov.': 'Nov', 'déc.': 'Dec', janvier: 'January', 'février': 'February', avril: 'April', juillet: 'July',
+    septembre: 'September', octobre: 'October', novembre: 'November', 'décembre': 'December' };
+  var dateRe = new RegExp('(^|[^0-9A-Za-zÀ-ÿ_.])(' + Object.keys(DATES).sort(function (a, b) { return b.length - a.length; }).map(esc).join('|') +
+    ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g');
+  function part(v, n) {                 // one changing part: its own translation, else each « ; » item, else dates only
+    if (n >= 3) return v;
+    var t = trad(v, n + 1);
+    if (t != null) return t;
+    if (v.indexOf(' ; ') > 0) return v.split(' ; ').map(function (x) { return part(x, n); }).join('; ');
+    return v.replace(dateRe, function (x, a, b) { return a + DATES[b]; });
+  }
+  function trad(s, n) {
+    if (!exact || nLu !== (window.EN_PAGE || []).length) compiler();
+    var k = norm(s);
+    if (k === ':' && /^\s/.test(s)) return ':' + /\s*$/.exec(s)[0];      // « Mise à jour : » → « Update: »
+    if (!k || !/[A-Za-zÀ-ÿ]/.test(k)) return null;
+    var r;
+    if (!n && memo.has(k)) r = memo.get(k);
+    else {
+      r = exact.get(k);
+      if (r === undefined) for (var i = 0; i < pats.length; i++) {
+        var p = pats[i], m = p.re.exec(k);
+        if (!m) continue;
+        r = p.en.replace(/\{(\w+)\}/g, function (x, nom) {
+          var j = p.noms.indexOf(nom);
+          return j < 0 ? x : part(m[j + 1], n);
+        });
+        break;
+      }
+      if (r === undefined && phrRe && /[a-zà-ÿ]/.test(k)) {
+        var chg = false;
+        var t2 = k.replace(phrRe, function (x, a, b) { chg = true; return a + phrMap.get(b); });
+        if (chg) r = t2;
+      }
+      if (r === undefined) r = null;
+      if (!n) memo.set(k, r);
+    }
+    if (r == null) return null;
+    var deb = /^\s*/.exec(s)[0];
+    if (/^[:;!?]/.test(r)) deb = '';                       // French space before « : » — none in English
+    return deb + r + /\s*$/.exec(s)[0];
+  }
+  // for code that needs a sentence outside the page (a dialog, the tab title): T('…') gives it in the current language
+  window.T = function (s) { if (window.LANG !== 'en') return s; var t = trad(s, 0); return t == null ? s : t; };
+
+  // ---- the page: every text and a few attributes; never what people type, nor marked parts (data-notr)
+  var ORIG = new WeakMap(), AORIG = new WeakMap();
+  var ATTR = ['title', 'placeholder', 'aria-label', 'alt'];
+  var SAUTE = /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/;
+  var bouton = function (el) { return el.tagName === 'INPUT' && /^(button|submit|reset)$/i.test(el.type); };
+  function saute(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) if (SAUTE.test(e.tagName) || e.hasAttribute('data-notr') || e.isContentEditable) return true;
+    return false;
+  }
+  function texte(nd) {
+    var v = nd.nodeValue, o = ORIG.get(nd);
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) { if (o) ORIG.delete(nd); return; }
+    ORIG.set(nd, [v, en]); nd.nodeValue = en;
+  }
+  function un(el, a) {
+    var v = el.getAttribute(a);
+    if (v == null) return;
+    var m = AORIG.get(el), o = m && m[a];
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) return;
+    if (!m) AORIG.set(el, m = {});
+    m[a] = [v, en]; el.setAttribute(a, en);
+  }
+  function attrs(el) {
+    for (var i = 0; i < ATTR.length; i++) if (el.hasAttribute(ATTR[i])) un(el, ATTR[i]);
+    if (bouton(el)) un(el, 'value');
+  }
+  function parcourir(r) {
+    if (!r) return;
+    if (r.nodeType === 3) { if (!saute(r.parentElement)) texte(r); return; }
+    if (r.nodeType !== 1) return;
+    if (saute(r)) { if (r.tagName === 'TEXTAREA' && !saute(r.parentElement)) attrs(r); return; }
+    attrs(r);
+    var w = document.createTreeWalker(r, 5, { acceptNode: function (n) {
+      if (n.nodeType !== 1 || !(SAUTE.test(n.tagName) || n.hasAttribute('data-notr') || n.isContentEditable)) return 1;
+      if (n.tagName === 'TEXTAREA' && !n.hasAttribute('data-notr')) attrs(n);       // its placeholder, never what's typed
+      return 2; } });
+    for (var n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) texte(n); else attrs(n); }
+  }
+  function remettre() {
+    var w = document.createTreeWalker(document.documentElement, 5);
+    for (var n = w.currentNode; n; n = w.nextNode()) {
+      if (n.nodeType === 3) { var o = ORIG.get(n); if (o) { if (n.nodeValue === o[1]) n.nodeValue = o[0]; ORIG.delete(n); } }
+      else { var m = AORIG.get(n); if (m) { for (var a in m) if (n.getAttribute(a) === m[a][1]) n.setAttribute(a, m[a][0]); AORIG.delete(n); } }
+    }
+  }
+  new MutationObserver(function (ms) {
+    if (window.LANG !== 'en') return;
+    ms.forEach(function (m) {
+      if (m.type === 'childList') m.addedNodes.forEach(parcourir);
+      else if (m.type === 'characterData') { if (!saute(m.target.parentElement)) texte(m.target); }
+      else if (m.target.nodeType === 1 && !saute(m.target.parentElement) && !/^(SCRIPT|STYLE)$/.test(m.target.tagName) &&
+        (m.attributeName !== 'value' || bouton(m.target))) un(m.target, m.attributeName);
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true,
+    attributeFilter: ATTR.concat('value') });
+
+  // ---- the switch, upper right
+  function maj() {
+    var d = document.getElementById('stlLang');
+    if (d) Array.prototype.forEach.call(d.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.getAttribute('data-l') === window.LANG); });
+  }
+  function poser(l) {
+    if (l === window.LANG) return;
+    window.LANG = l; lsSet(l); document.documentElement.lang = l; maj();
+    if (l === 'fr') remettre();
+    try { if (typeof window.surLangue === 'function') window.surLangue(l); } catch (e) { console.log('surLangue : ' + e); }
+    if (l === 'en') parcourir(document.documentElement);
+  }
+  window.poserLangue = poser;
+  // the page's HTML in French (for « Plein écran », which writes the page into a new tab: it then shows in the chosen language)
+  window.htmlFr = function () {
+    if (window.LANG !== 'en') return document.documentElement.outerHTML;
+    remettre();
+    var h = document.documentElement.outerHTML;
+    parcourir(document.documentElement);
+    return h;
+  };
+  function boutons() {
+    if (document.getElementById('stlLang') || !document.body) return;
+    var d = document.createElement('div');
+    d.id = 'stlLang'; d.setAttribute('data-notr', ''); d.setAttribute('translate', 'no');
+    d.innerHTML = '<button type="button" data-l="fr" title="Français">FR</button><button type="button" data-l="en" title="English">EN</button>';
+    d.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) poser(b.getAttribute('data-l')); });
+    var ici = document.querySelector('[data-langue-ici]');     // the page's own header row, if it has one (and it's shown)
+    if (ici && !ici.getClientRects().length) ici = null;
+    if (ici) { d.className = 'dans'; ici.appendChild(d); }
+    else { d.className = 'rangee'; document.body.insertBefore(d, document.body.firstChild); }   // a thin row of its own, upper right
+    maj();
+  }
+  function init() { boutons(); if (window.LANG === 'en') parcourir(document.documentElement); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<!-- LANGUE:fin -->
+<!-- EN:debut — the English of this page (source: outils/en/) -->
+<script>
+window.EN_PAGE = [
+// shared by every page
+['En test', 'Testing'],
+[': cette page est encore en développement. Vérifie avant de t\'y fier et signale tout problème à UK.', ': this page is still being developed. Double-check before relying on it, and report any problem to UK.'],
+['Données d\'exemple', 'Sample data'],
+['Mis à jour {d}', 'Updated {d}'], ['Mis à jour', 'Updated'], ['Mis à jour : {d}', 'Updated: {d}'],
+['Envoyer', 'Send'], ['Envoi…', 'Sending…'], ['— choisir —', '— choose —'], ['Initiales', 'Initials'],
+['Trop de demandes pour le moment : réessaie dans une heure.', 'Too many requests right now: try again in an hour.'],
+['Envoi impossible pour le moment. Réessaie dans quelques minutes.', 'Can\'t send right now. Try again in a few minutes.'],
+['Initiales inconnues.', 'Unknown initials.'],
+// leave types (from the sheet)
+['Congé', 'Leave'], ['congé', 'leave'], ['Autofinancé', 'Self-funded leave'], ['Parental', 'Parental leave'], ['Formation / affectation', 'Training / assignment'],
+['Sans solde', 'Unpaid leave'], ['Retraite / départ', 'Retirement / departure'], ['Fin de contrat', 'End of contract'],
+['Congé prolongé', 'Extended leave'], ['Autre', 'Other'], ['Maladie', 'Sick leave'],
+// paid holidays (Setup tab)
+['Jour de l\'An', 'New Year\'s Day'], ['Vendredi saint', 'Good Friday'], ['Lundi de Pâques', 'Easter Monday'], ['Fête de la Reine', 'Victoria Day'],
+['Fête de la St-Jean', 'St-Jean-Baptiste Day'], ['Fête du Canada', 'Canada Day'], ['Fête du Travail', 'Labour Day'],
+['Vérité et réconciliation', 'Truth and Reconciliation Day'], ['Action de grâce', 'Thanksgiving'], ['Jour du Souvenir', 'Remembrance Day'],
+['Noël', 'Christmas'], ['Lendemain de Noël', 'Boxing Day'], ['Journée nationale des patriotes', 'National Patriots\' Day'],
+['Vacances — St-Laurent', 'Vacation — St-Laurent'], ['Vacances — sélection', 'Vacation — picks'],
+['TEST EN COURS', 'TEST IN PROGRESS'],
+['Données fictives : ce ne sont pas les vrais choix de vacances. Ne pas en tenir compte. La vraie sélection sera annoncée par UK.',
+ 'Fake data: these aren\'t the real vacation picks. Ignore them. UK will announce the real selection.'],
+['Je suis :', 'I am:'], ['Ouvrir la sélection dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the picks in a new tab, full screen width'],
+['⤢ Plein écran', '⤢ Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
+['Surveillants', 'Supervisors'],
+['Feuille lue à {t}', 'Sheet read at {t}'], ['Relire la feuille maintenant', 'Read the sheet again now'],
+['Choisir les jours un par un', 'Choose days one at a time'], ['Chaque clic ajoute ou enlève un seul jour.', 'Each click adds or removes a single day.'],
+['{g} — tour {n}', '{g} — round {n}'], ['C\'est ton tour !', 'It\'s your turn!'], ['C\'est au tour de', 'Now picking:'],
+['Tout le monde a fini ce tour.', 'Everyone has finished this round.'],
+['Demandes en file d\'attente (inscrites automatiquement à leur tour) : {x}', 'Queued requests (entered automatically at their turn): {x}'],
+['Maximum {n} par jour · {m} overlap par personne', 'Maximum {n} per day · {m} overlap per person'],
+['Maximum {n} par jour · {m} overlaps par personne', 'Maximum {n} per day · {m} overlaps per person'],
+// grid (through T())
+['Afficher Ordre, Pris, Solde et Ovlp.', 'Show Order, Taken, Balance and Ovlp.'],
+['Masquer Ordre, Pris, Solde et Ovlp. (garder les initiales)', 'Hide Order, Taken, Balance and Ovlp. (keep the initials)'],
+['Afficher les colonnes', 'Show the columns'], ['Masquer les colonnes', 'Hide the columns'],
+['Ordre', 'Order'], ['Ini.', 'Ini.'], ['Jours de vacances pris', 'Vacation days taken'], ['Pris', 'Taken'],
+['Jours qu\'il reste (crédits − pris)', 'Days left (credits − taken)'], ['Solde', 'Balance'], ['Overlaps restants', 'Overlaps left'], ['Ovlp.', 'Ovlp.'],
+['Férié payé 1,5x : {f}', 'Stat holiday paid 1.5x: {f}'], ['Relâche : {r}', 'Spring break: {r}'],
+['{n} en vacances : overlap utilisé', '{n} on vacation: overlap used'], ['{n} en vacances : maximum atteint', '{n} on vacation: maximum reached'],
+['{ini} travaille à la place de {ini2}', '{ini} works instead of {ini2}'], ['{ini} travaille pour {ini2}', '{ini} works for {ini2}'],
+['tour {n}', 'round {n}'], ['son overlap', 'their overlap'], ['pris sur un congé : à vérifier', 'taken on a day off: to be checked'],
+['Vac.', 'Vac.'], ['En vacances', 'On vacation'], ['Libres', 'Free'], ['Places restantes', 'Spots left'],
+['Overlap utilisé par', 'Overlap used by'], ['Trop de monde ce jour-là', 'Too many people that day'],
+// legend
+['vacances (le chiffre = le tour)', 'vacation (the number = the round)'], ['jour au maximum (plus foncé : en congé)', 'day at the maximum (darker: day off)'],
+['overlap utilisé', 'overlap used'], ['congé (cycle 5-4)', 'day off (5-4 cycle)'], ['initiales : le collègue travaille à sa place', 'initials: the colleague works in their place'],
+['pris sur un congé (à vérifier)', 'taken on a day off (to be checked)'], ['à son tour', 'their turn'],
+['ma demande (pas encore dans la feuille)', 'my request (not in the sheet yet)'], ['férié', 'stat holiday'], ['relâche', 'spring break'], ['fin de semaine', 'weekend'],
+// checks while choosing
+['1 jour déjà complet', '1 day already full'], ['{n} jours déjà complets', '{n} days already full'],
+['cycle incomplet alors que 1 autre jour est libre ({d})', 'incomplete cycle while 1 other day is free ({d})'],
+['cycle incomplet alors que {n} autres jours sont libres ({d})', 'incomplete cycle while {n} other days are free ({d})'],
+['moins de {n} jours', 'fewer than {n} days'], ['ok', 'ok'], ['cycle complet', 'full cycle'],
+['cycle incomplet : les autres jours sont déjà pris', 'incomplete cycle: the other days are already taken'],
+['cycle incomplet (permis à ce tour)', 'incomplete cycle (allowed this round)'],
+['{d} : déjà au maximum, ton overlap sera utilisé', '{d}: already at the maximum, your overlap will be used'],
+['1 jour au maximum : il faudrait ton overlap', '1 day at the maximum: you\'d need your overlap'],
+['{n} jours au maximum : il faudrait ton overlap', '{n} days at the maximum: you\'d need your overlap'],
+['{n} cycles : au tour {r}, c\'est {m} au maximum', '{n} cycles: in round {r}, it\'s {m} at most'],
+['1 jour choisi, il t\'en reste {s} (solde)', '1 day chosen, you have {s} left (balance)'],
+['{n} jours choisis, il t\'en reste {s} (solde)', '{n} days chosen, you have {s} left (balance)'],
+['il te faudrait {n} overlaps, il t\'en reste {m}', 'you\'d need {n} overlaps, you have {m} left'],
+['tu as déjà fini ce tour (✓ dans la feuille) : reviens au prochain tour', 'you\'ve already finished this round (✓ in the sheet): come back next round'],
+['ce n\'est pas encore ton tour (c\'est au tour de {ini}) : ta demande attendra en file et s\'inscrira toute seule à ton tour',
+ 'it\'s not your turn yet ({ini} is picking): your request will wait in the queue and be entered automatically at your turn'],
+['une demande qui ne respecte pas les règles n\'est pas inscrite : elle est envoyée à UK, qui décide',
+ 'a request that doesn\'t follow the rules isn\'t entered: it\'s sent to UK, who decides'],
+['✓ {t}', '✓ {t}'], ['✗ {t}', '✗ {t}'], ['↑ {t}', '↑ {t}'], ['⚠ {t}', '⚠ {t}'],
+// my request
+['Ma demande', 'My request'],
+['Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ta demande.',
+ 'Choose your initials at the top (“I am”): your row becomes clickable and you can prepare your request.'],
+['Tu es dans l\'onglet {g}.', 'You\'re in the {g} tab.'], ['Y aller', 'Go there'],
+['Ma demande — {ini}, tour {n}', 'My request — {ini}, round {n}'], ['Instructions', 'Instructions'], ['Règle du tour {n}', 'Round {n} rule'],
+['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : le jour est ajouté. Clique encore pour l\'enlever. À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s\'inscrit toute seule quand ton tour arrive.',
+ 'Click one of your work days in your row (outlined in blue): the day is added. Click again to remove it. At your turn, your request is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it waits in the queue and is entered automatically when your turn comes.'],
+['Clique un de tes jours de travail dans ta rangée (encadrée en bleu) : les jours encore libres de ce cycle sont ajoutés (un jour déjà au maximum : clique-le pour utiliser ton overlap). Clique encore pour l\'enlever. À ton tour, ta demande est inscrite dans la feuille dès que UK a vérifié les choix précédents (souvent tout de suite), puis ton ✓ est coché. Avant ton tour, elle attend en file et s\'inscrit toute seule quand ton tour arrive.',
+ 'Click one of your work days in your row (outlined in blue): the days of that cycle that are still free are added (a day already at the maximum: click it to use your overlap). Click again to remove it. At your turn, your request is entered in the sheet as soon as UK has checked the previous picks (often right away), then your ✓ is ticked. Before your turn, it waits in the queue and is entered automatically when your turn comes.'],
+['Ta demande est en file d\'attente : elle sera inscrite automatiquement à ton tour. Une nouvelle demande la remplace.',
+ 'Your request is in the queue: it will be entered automatically at your turn. A new request replaces it.'],
+['Ta demande en attente n\'a pas pu être inscrite à ton tour (jours plus libres ou règle) : UK a été avisé. C\'est toujours ton tour : refais ta demande.',
+ 'Your queued request couldn\'t be entered at your turn (days no longer free, or a rule): UK has been told. It\'s still your turn: make your request again.'],
+['Aucun jour choisi pour l\'instant.', 'No day chosen yet.'], ['1 jour', '1 day'], ['{n} jours', '{n} days'], ['enlever', 'remove'],
+['Pas encore envoyée : clique « Envoyer ma demande » plus bas. D\'ici là, tes jours restent gardés sur cet appareil.',
+ 'Not sent yet: click “Send my request” below. Until then, your days stay saved on this device.'],
+['Note pour UK (facultatif)', 'Note for UK (optional)'], ['Ta demande utilise ton overlap', 'Your request uses your overlap'],
+[': {d} est déjà au maximum. Il te reste {n} overlap pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} is already at the maximum. You have {n} overlap left for the year; once used, it doesn\'t come back.'],
+[': {d} est déjà au maximum. Il te reste {n} overlaps pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} is already at the maximum. You have {n} overlaps left for the year; once used, it doesn\'t come back.'],
+[': {d} sont déjà au maximum. Il te reste {n} overlap pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} are already at the maximum. You have {n} overlap left for the year; once used, it doesn\'t come back.'],
+[': {d} sont déjà au maximum. Il te reste {n} overlaps pour l\'année ; une fois utilisé, il ne revient pas.', ': {d} are already at the maximum. You have {n} overlaps left for the year; once used, it doesn\'t come back.'],
+['Oui, utiliser mon overlap et envoyer', 'Yes, use my overlap and send'],
+['Envoyer ma demande', 'Send my request'], ['Je ne prends rien à ce tour-ci', 'I\'m not taking anything this round'],
+// personal code
+['Code personnel ✓', 'Personal code ✓'], ['oublier sur cet appareil', 'forget on this device'], ['Effacer le code de cet appareil', 'Clear the code from this device'],
+['Ton code personnel (4 chiffres, reçu de UK) :', 'Your personal code (4 digits, from UK):'], ['Valider', 'OK'], ['retenir sur cet appareil', 'remember on this device'],
+['Il faut ton code pour envoyer une demande ou un échange. Décoche « retenir » sur un ordinateur partagé. Code perdu : demande-le à UK.',
+ 'You need your code to send a request or a trade. Untick “remember” on a shared computer. Lost code: ask UK.'],
+['4 chiffres.', '4 digits.'], ['Vérification…', 'Checking…'],
+['Vérification impossible pour le moment. Réessaie dans quelques minutes.', 'Can\'t check right now. Try again in a few minutes.'],
+['Code incorrect pour {ini}.', 'Wrong code for {ini}.'], ['Code incorrect pour {ini}. Trop d\'essais : réessaie dans une heure.', 'Wrong code for {ini}. Too many tries: try again in an hour.'],
+['Code incorrect pour {ini}. (Données d\'exemple : 1234)', 'Wrong code for {ini}. (Sample data: 1234)'],
+['Trop de codes erronés pour {ini} : réessaie dans une heure.', 'Too many wrong codes for {ini}: try again in an hour.'],
+['Pas de code personnel pour {ini} : demande-le à UK.', 'No personal code for {ini}: ask UK.'],
+// shift trades
+['date hors de l\'année de vacances', 'date outside the vacation year'], ['{ini} est en vacances ce jour-là', '{ini} is on vacation that day'],
+['déjà un échange inscrit pour {ini} ce jour-là ({x})', 'already a trade entered for {ini} that day ({x})'],
+['{ini} ne travaille pas ce jour-là (cycle 5-4)', '{ini} doesn\'t work that day (5-4 cycle)'], ['{ini} travaille déjà ce jour-là', '{ini} already works that day'],
+['Échange de quart', 'Shift trade'], ['+ Ajouter un échange', '+ Add a trade'],
+['Pour inscrire dans la grille un échange de quart : qui travaille à la place de qui, et quel jour. Il est inscrit tout de suite s\'il est possible (sinon UK décide) ; UK en reçoit une copie.',
+ 'To enter a shift trade in the grid: who works instead of whom, and which day. It\'s entered right away if possible (otherwise UK decides); UK gets a copy.'],
+['Le', 'On'], ['Qui travaille', 'Who works'], ['À la place de', 'Instead of'], ['travaille à la place de', 'works instead of'], ['Ajouter', 'Add'],
+['Tes jours de vacances choisis ne sont pas encore envoyés : le bouton ci-dessous n\'envoie que l\'échange. Pour tes vacances, utilise « Envoyer ma demande » dans « Ma demande ».',
+ 'Your chosen vacation days aren\'t sent yet: the button below only sends the trade. For your vacation, use “Send my request” in “My request”.'],
+['Entre d\'abord ton code personnel dans « Ma demande ».', 'First enter your personal code in “My request”.'],
+['Envoyer l\'échange', 'Send the trade'], ['Envoyer les échanges', 'Send the trades'],
+['Choisis la date.', 'Choose the date.'], ['Choisis les deux personnes.', 'Choose both people.'], ['Il faut deux personnes différentes.', 'It takes two different people.'],
+['Tu dois être une des deux personnes de l\'échange.', 'You must be one of the two people in the trade.'], ['10 échanges au plus par envoi.', '10 trades at most per send.'],
+['Envoyé à UK pour décision — rien n\'est inscrit : {r}', 'Sent to UK for a decision — nothing is entered: {r}'],
+['Inscrit ✓ dans la grille — UK en a reçu une copie.', 'Entered ✓ in the grid — UK got a copy.'],
+['Inscrit ✓ dans la grille — UK en a reçu une copie. Tes jours de vacances, eux, ne sont pas encore envoyés : « Envoyer ma demande ».',
+ 'Entered ✓ in the grid — UK got a copy. Your vacation days, though, aren\'t sent yet: “Send my request”.'],
+['Envoi impossible pour le moment. Réessaie dans quelques minutes, ou texte UK.', 'Can\'t send right now. Try again in a few minutes, or text UK.'],
+// sending
+['Vérification de ton code…', 'Checking your code…'], ['Vérification de l\'échange…', 'Checking the trade…'], ['Inscription dans la grille…', 'Entering it in the grid…'],
+['Copie à UK…', 'Copy to UK…'], ['Presque fini…', 'Almost done…'], ['Vérification des règles du tour…', 'Checking the round\'s rules…'],
+['Ton tour est noté…', 'Noting your turn…'], ['Inscription de tes jours…', 'Entering your days…'], ['— ne ferme pas la page', '— don\'t close the page'],
+['C\'est noté ✓ — tu ne prends rien à ce tour-ci, ton tour est terminé.', 'Noted ✓ — you\'re not taking anything this round, your turn is done.'],
+['Inscrit ✓ dans la feuille — ton tour est terminé. UK en a reçu une copie.', 'Entered ✓ in the sheet — your turn is done. UK got a copy.'],
+['Reçu ✓ — c\'est ton tour, mais UK vérifie d\'abord les choix de la personne avant toi. Ta demande s\'inscrira toute seule dès qu\'il les aura confirmés.',
+ 'Received ✓ — it\'s your turn, but UK first checks the picks of the person before you. Your request will be entered automatically as soon as they\'re confirmed.'],
+['En file d\'attente ✓ — 1 personne avant toi. Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
+ 'Queued ✓ — 1 person before you. Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['En file d\'attente ✓ — {n} personnes avant toi. Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
+ 'Queued ✓ — {n} people before you. Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['En file d\'attente ✓ — Ta demande s\'inscrira toute seule à ton tour ; UK sera avisé si elle ne peut plus passer.',
+ 'Queued ✓ — Your request will be entered automatically at your turn; UK will be told if it can no longer go through.'],
+['Attention : en ce moment, elle ne passerait pas', 'Careful: right now, it wouldn\'t go through'], ['({r}).', '({r}).'],
+['Envoyé à UK pour décision — rien n\'est inscrit : {r}. C\'est toujours ton tour.', 'Sent to UK for a decision — nothing is entered: {r}. It\'s still your turn.'],
+['Envoyé ✓', 'Sent ✓'],
+['Le serveur du site n\'a pas encore la nouvelle version (UK doit la déployer). Réessaie plus tard.', 'The site\'s server doesn\'t have the new version yet (UK has to deploy it). Try again later.'],
+['Feuille des vacances indisponible pour le moment.', 'Vacation sheet unavailable right now.'],
+// server checks (shown after sending)
+['{d} : déjà en vacances', '{d}: already on vacation'], ['{d} : pas un jour de travail', '{d}: not a work day'],
+['{d} : complet (overlap déjà utilisé)', '{d}: full (overlap already used)'],
+['1 jour au maximum : il faudrait 1 overlap, il en reste {m}', '1 day at the maximum: it would take 1 overlap, {m} left'],
+['{n} jours au maximum : il faudrait {k} overlaps, il en reste {m}', '{n} days at the maximum: it would take {k} overlaps, {m} left'],
+['{n} jours demandés, il en reste {m} (solde)', '{n} days requested, {m} left (balance)'],
+['cycle {d} incomplet alors que 1 autre jour est libre ({x})', 'cycle {d} incomplete while 1 other day is free ({x})'],
+['cycle {d} incomplet alors que {n} autres jours sont libres ({x})', 'cycle {d} incomplete while {n} other days are free ({x})'],
+['cycle {d} : moins de {n} jours', 'cycle {d}: fewer than {n} days'],
+['Aucun jour choisi.', 'No day chosen.'], ['Aucun échange.', 'No trade.'], ['Date hors de l\'année de vacances.', 'Date outside the vacation year.'],
+['Date mal écrite.', 'Badly written date.'], ['Initiales inconnues dans la feuille des vacances.', 'Initials not found in the vacation sheet.'],
+['Les deux personnes doivent être du même groupe ({g}).', 'Both people must be in the same group ({g}).'],
+['Les stagiaires ne choisissent pas de vacances.', 'Trainees don\'t pick vacation.'], ['Trop d\'échanges dans un seul envoi (10 au plus).', 'Too many trades in one send (10 at most).'],
+['Trop de jours dans une seule demande.', 'Too many days in one request.'], ['Tu as déjà fini le tour {n} (✓). Reviens au prochain tour.', 'You\'ve already finished round {n} (✓). Come back next round.'],
+['Échange mal écrit.', 'Badly written trade.'], ['contrôleurs', 'controllers'], ['surveillants', 'supervisors'],
+['Erreur du serveur : rien n\'est inscrit. UK a été avisé ; réessaie plus tard.', 'Server error: nothing is entered. UK has been told; try again later.'],
+['Feuille lue à', 'Sheet read at'], ['Journée nationale de la vérité et de la réconciliation', 'National Day for Truth and Reconciliation'],
+['La plupart des CSS', 'Most school service centres'], ['(probable, à confirmer)', '(likely, to be confirmed)'], ['(à confirmer)', '(to be confirmed)'],
+];
+</script>
+<!-- EN:fin -->
 <!--
   VACANCES — élément HTML pour le site Wix (Ajouter → Intégrer du code → HTML personnalisé), sur sa propre page.
   - Copie en direct de l'onglet « Sélection » du fichier « Vacances 2027-2028 St-Laurent » (lecture seule) : choix de
@@ -183,7 +558,7 @@
 <!-- TEST : enlever ce bandeau quand la vraie sélection commence -->
 <div class="bandeau-test" role="note"><div class="ruban"></div><div class="txt"><b>TEST EN COURS</b>
   <span>Données fictives : ce ne sont pas les vrais choix de vacances. Ne pas en tenir compte. La vraie sélection sera annoncée par UK.</span></div></div>
-<header>
+<header data-langue-ici>
   <h1>Vacances — sélection</h1>
   <span class="etat" id="etat">Chargement…</span>
 </header>
@@ -195,14 +570,14 @@
 <div id="tour"></div>
 <div class="modebar" id="modebar" hidden></div>
 <div class="mois" id="mois"></div>
-<div class="grille" id="grille"></div>
+<div class="grille" id="grille" data-notr></div>
 <div class="leg" id="leg"></div>
 <div class="dem" id="dem"></div>
 <div class="dem" id="ech" hidden></div>
 
 <script>
 // A copy of this whole page as it was loaded, for the « Plein écran » button (taken before anything is drawn)
-const PAGE_SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
+const PAGE_SOURCE = '<!doctype html>\n' + (window.htmlFr ? htmlFr() : document.documentElement.outerHTML);
 const CONFIG = {
   // lien de l'application Web de l'Admin. Worksheet (le même que dans le calendrier). Vide = données d'exemple.
   url: 'https://script.google.com/macros/s/AKfycbzlun0DaIaOlLTwCVXApc4tv6pAecIiLJsfTHMK8mpsCSw0njNe87POvAsIJCePo1Ot/exec',
@@ -216,7 +591,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const pad = n => String(n).padStart(2, '0');
 const utc = d => new Date(d + 'T00:00:00Z');
 const ymd = t => `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
-const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(utc(d));
+const fmt = (d, o) => new Intl.DateTimeFormat(LOC(), Object.assign({ timeZone: 'UTC' }, o)).format(utc(d));
 const jour = d => fmt(d, { weekday: 'short', day: 'numeric', month: 'short' });
 const mod9 = n => ((n % 9) + 9) % 9;
 const mem = {
@@ -316,8 +691,13 @@ function afficher() {
     `Feuille lue à ${esc(d.at.slice(11))}<button id="maj" title="Relire la feuille maintenant">↻</button>`;
 }
 
+// the round's rule [short, details], in English when the Règles tab has it (columns D and E)
+function reglesDe(tour) {
+  const x = (S.d.regles || {})[String(tour)] || [];
+  return LANG === 'en' && x[2] ? [x[2], x[3] || x[1]] : x;
+}
 function afficherTour() {
-  const g = grp(), qui = aQui(g), r = (S.d.regles || {})[String(g.tour)] || [];
+  const g = grp(), qui = aQui(g), r = reglesDe(g.tour);
   const moiTour = qui && qui.i === S.moi;
   document.getElementById('tour').innerHTML = `<div class="tour${moiTour ? ' moi-tour' : ''}">` +
     `<b>${esc(g.nom)} — tour ${g.tour}</b>` +
@@ -328,16 +708,17 @@ function afficherTour() {
     `<br><span class="suivants">Maximum ${g.max} par jour · ${g.ovlp} overlap${g.ovlp > 1 ? 's' : ''} par personne</span></div>`;
 }
 
-const boutonPlier = () => `<button class="plier" data-plier title="${S.replie ? 'Afficher Ordre, Pris, Solde et Ovlp.' : 'Masquer Ordre, Pris, Solde et Ovlp. (garder les initiales)'}" ` +
-  `aria-label="${S.replie ? 'Afficher les colonnes' : 'Masquer les colonnes'}">${S.replie ? '»' : '«'}</button>`;
+// the grid is marked data-notr (thousands of cells: the FR/EN switch skips it); its few words go through T() here instead
+const boutonPlier = () => `<button class="plier" data-plier title="${T(S.replie ? 'Afficher Ordre, Pris, Solde et Ovlp.' : 'Masquer Ordre, Pris, Solde et Ovlp. (garder les initiales)')}" ` +
+  `aria-label="${T(S.replie ? 'Afficher les colonnes' : 'Masquer les colonnes')}">${S.replie ? '»' : '«'}</button>`;
 function afficherGrille() {
   const d = S.d, g = grp(), mm = moiDe();
   const fer = new Map((d.feries || []).map(([x, n]) => [x, n]));
   const rel = k => (d.relache || []).find(([a, b]) => dateDe(k) >= a && dateDe(k) <= b);
   const vide = '<th class="g g0"></th><th class="g g1"></th><th class="g g2"></th><th class="g g3"></th><th class="g g4"></th>';
   let m = '<tr class="m">' + vide.replace('<th class="g g1"></th>', `<th class="g g1">${boutonPlier()}</th>`);
-  let n = '<tr class="n"><th class="g g0">Ordre</th><th class="g g1">Ini.</th><th class="g g2" title="Jours de vacances pris">Pris</th>' +
-    '<th class="g g3" title="Jours qu\'il reste (crédits − pris)">Solde</th><th class="g g4" title="Overlaps restants">Ovlp.</th>';
+  let n = `<tr class="n"><th class="g g0">${T('Ordre')}</th><th class="g g1">${T('Ini.')}</th><th class="g g2" title="${T('Jours de vacances pris')}">${T('Pris')}</th>` +
+    `<th class="g g3" title="${T('Jours qu\'il reste (crédits − pris)')}">${T('Solde')}</th><th class="g g4" title="${T('Overlaps restants')}">${T('Ovlp.')}</th>`;
   let w = '<tr class="w">' + vide;
   const mdeb = k => dateDe(k).slice(8) === '01' ? ' mdeb' : '';
   for (let k = 0; k < d.n; k++) {
@@ -349,9 +730,9 @@ function afficherGrille() {
     }
     const f = fer.get(x), r = rel(k), we = dow === 0 || dow === 6, c = etatCol(g, k), nb = g.enVac[k] || 0;
     const titre = [jour(x), f ? 'Férié payé 1,5x : ' + f : '', r ? 'Relâche : ' + r[2] : '',
-      c === 'cr' ? `${nb} en vacances : overlap utilisé` : c === 'cj' ? `${nb} en vacances : maximum atteint` : ''].filter(Boolean).join(' — ');
+      c === 'cr' ? `${nb} en vacances : overlap utilisé` : c === 'cj' ? `${nb} en vacances : maximum atteint` : ''].filter(Boolean).map(T).join(' — ');
     n += `<th class="j ${c || (f ? 'fer' : we ? 'we' : '')}${mdeb(k)}" title="${esc(titre)}">${t.getUTCDate()}</th>`;
-    w += `<th class="j ${c || (f ? 'fer' : r ? 'rel' : we ? 'we' : '')}${mdeb(k)}" title="${esc(titre)}">${'dlmmjvs'[dow]}</th>`;
+    w += `<th class="j ${c || (f ? 'fer' : r ? 'rel' : we ? 'we' : '')}${mdeb(k)}" title="${esc(titre)}">${(LANG === 'en' ? 'SMTWTFS' : 'dlmmjvs')[dow]}</th>`;
   }
   const qui = aQui(g);
   const rangees = g.gens.map(p => {
@@ -365,16 +746,16 @@ function afficherGrille() {
       const v = p.j[k], base = baseTravail(p, k), col = etatCol(g, k);
       let cls, txt = '', titre = '';
       if (v && !estVac(v)) {
-        if (p.cy && base) { cls = 'ech'; titre = `${v} travaille à la place de ${p.i}`; } else { cls = 'pour'; titre = `${p.i} travaille pour ${v}`; }
+        if (p.cy && base) { cls = 'ech'; titre = T(`${v} travaille à la place de ${p.i}`); } else { cls = 'pour'; titre = T(`${p.i} travaille pour ${v}`); }
         txt = esc(v);
       } else if (estVac(v)) {
         const ov = g.ovlpPar[k] === p.i;
         cls = p.cy && base === false ? 'vo' : ov ? 'vm' : col === 'cr' ? 'vt' : 'v';
         txt = esc(v);
-        titre = `${p.i} · tour ${v}${ov ? ' · son overlap' : ''}${cls === 'vo' ? ' · pris sur un congé : à vérifier' : ''}`;
+        titre = [p.i, T('tour ' + v), ov ? T('son overlap') : '', cls === 'vo' ? T('pris sur un congé : à vérifier') : ''].filter(Boolean).join(' · ');
       } else {
         const pq = p.cy && base === false ? pourQui(g, p, k) : null;
-        if (pq) { cls = 'pour'; txt = esc(pq.i); titre = `${p.i} travaille pour ${pq.i}`; }
+        if (pq) { cls = 'pour'; txt = esc(pq.i); titre = T(`${p.i} travaille pour ${pq.i}`); }
         else cls = col ? col + (p.cy && base === false ? ' off' : '') : p.cy && base === false ? 'off' : tour ? 'tr' : '';   // full days still show the 5-4 cycle
       }
       if (moi && !v && travaille(g, p, k)) {
@@ -388,10 +769,10 @@ function afficherGrille() {
   const sep = `<tr class="sep"><td class="g g0"></td><td class="g g1"></td><td class="g g2"></td><td class="g g3"></td><td class="g g4"></td><td colspan="${d.n}"></td></tr>`;
   const ligne = (cls, lab, titre, cell) => `<tr class="tot ${cls}"><td class="g g0"></td><td class="g g1" title="${titre}">${lab}</td><td class="g g2"></td><td class="g g3"></td><td class="g g4"></td>` +
     Array.from({ length: d.n }, (_, k) => cell(k)).join('') + '</tr>';
-  const bas = ligne('', 'Vac.', 'En vacances', k => `<td class="j ${etatCol(g, k)}${mdeb(k)}">${g.enVac[k] || ''}</td>`) +
-    ligne('places', 'Libres', 'Places restantes', k => `<td class="j${etatCol(g, k) === 'cr' ? ' crb' : ''}${mdeb(k)}">${g.places[k] || 0}</td>`) +
-    ligne('ovl', 'Ovlp.', 'Overlap utilisé par', k => { const v = g.ovlpPar[k] || '';
-      return `<td class="j${v ? ' crb' : ''}${mdeb(k)}"${v ? ` title="${v === 'TROP' ? 'Trop de monde ce jour-là' : 'Overlap utilisé par ' + esc(v)}"` : ''}>${esc(v === 'TROP' ? '!' : v)}</td>`; });
+  const bas = ligne('', T('Vac.'), T('En vacances'), k => `<td class="j ${etatCol(g, k)}${mdeb(k)}">${g.enVac[k] || ''}</td>`) +
+    ligne('places', T('Libres'), T('Places restantes'), k => `<td class="j${etatCol(g, k) === 'cr' ? ' crb' : ''}${mdeb(k)}">${g.places[k] || 0}</td>`) +
+    ligne('ovl', T('Ovlp.'), T('Overlap utilisé par'), k => { const v = g.ovlpPar[k] || '';
+      return `<td class="j${v ? ' crb' : ''}${mdeb(k)}"${v ? ` title="${v === 'TROP' ? T('Trop de monde ce jour-là') : T('Overlap utilisé par') + ' ' + esc(v)}"` : ''}>${esc(v === 'TROP' ? '!' : v)}</td>`; });
   const el = document.getElementById('grille'), sx = el.scrollLeft, sy = el.scrollTop;
   el.classList.toggle('replie', S.replie);
   el.innerHTML = `<table><thead>${m}</tr>${n}</tr>${w}</tr></thead><tbody>${rangees}${sep}${bas}</tbody></table>`;
@@ -463,7 +844,7 @@ function afficherDemande() {
   const mm = moiDe();
   if (!mm) { el.innerHTML = '<h2>Ma demande</h2><div class="aide">Choisis tes initiales en haut (« Je suis ») : ta rangée devient cliquable et tu peux préparer ta demande.</div>'; return; }
   if (mm.gi !== S.g) { el.innerHTML = `<h2>Ma demande</h2><div class="aide">Tu es dans l'onglet ${esc(mm.g.nom)}. <button class="lien" data-g="${mm.gi}" style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">Y aller</button></div>`; return; }
-  const a = analyse(), g = mm.g, r = (S.d.regles || {})[String(g.tour)] || [];
+  const a = analyse(), g = mm.g, r = reglesDe(g.tour);
   const garde = id => { const x = document.getElementById(id); return x ? x.value : ''; };
   const note = garde('note');
   let h = `<h2>Ma demande — ${esc(S.moi)}, tour ${g.tour}</h2>` +
@@ -803,6 +1184,7 @@ function demo() {
     catch (e) { w.location.href = URL.createObjectURL(new Blob([PAGE_SOURCE], { type: 'text/html' })); }
   };
 })();
+window.surLangue = () => afficher();   // FR/EN switch: grid, dates and rules in the new language
 charger();
 if (CONFIG.url) setInterval(() => { if (!document.hidden && !S.envoi) charger(); }, CONFIG.rafraichir * 60000);   // the script caches 2 min
 </script>

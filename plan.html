@@ -4,6 +4,328 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plan du jour — St-Laurent</title>
+<!-- LANGUE:debut — FR/EN switch, the same block in every page (source: outils/langue.html, copied in by outils/langue.py).
+     The page stays written in French; in English, every piece of text shown is looked up in the page's list
+     (window.EN_PAGE, just below this block) and replaced. {x} in a list entry = a part that changes (number, initials,
+     date…), carried over to the English: {ini…} = initials only, {n…} = a number only, any other name = any text. Dates use LOC() ('fr-CA' / 'en-CA'). The choice is kept on the device;
+     …&lang=en in the link (texts and emails to a person set to English) opens the page in English. -->
+<style>
+  #stlLang { position: absolute; top: 6px; right: 8px; z-index: 60; display: flex; border: 1px solid #dadce0; border-radius: 14px;
+             overflow: hidden; background: #fff; font: 600 11.5px/1 Roboto, "Segoe UI", Arial, sans-serif; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  #stlLang button { border: 0; background: none; margin: 0; padding: 5px 8px; cursor: pointer; color: #5f6368; font: inherit; letter-spacing: .03em; }
+  #stlLang button.on { background: #1a73e8; color: #fff; cursor: default; }
+  #stlLang button:not(.on):hover { background: #f1f3f4; }
+  #stlLang.dans { position: static; flex: none; align-self: center; margin-left: 6px; box-shadow: none; }
+  #stlLang.rangee { position: relative; top: 0; right: 0; width: max-content; margin: 6px 8px 2px auto; box-shadow: none; }
+  @media (max-width: 760px) {   /* phones: right end of the title row; the status line goes under it */
+    [data-langue-ici] > #stlLang.dans { order: 2; margin-left: auto; }
+    [data-langue-ici] > .etat { order: 3; }
+  }
+  @media print { #stlLang { display: none; } }
+</style>
+<script>
+(function () {
+  'use strict';
+  var K = 'stl.lang';
+  function lsGet() { try { return localStorage.getItem(K); } catch (e) { return null; } }
+  function lsSet(v) { try { localStorage.setItem(K, v); } catch (e) { /* no storage: this visit only */ } }
+  var q = null;
+  try { q = window.LANG_URL || new URLSearchParams(location.search).get('lang'); } catch (e) { /* none */ }
+  if (q === 'en' || q === 'fr') lsSet(q);
+  window.LANG = q === 'en' || q === 'fr' ? q : lsGet() === 'en' ? 'en' : 'fr';
+  window.LOC = function () { return window.LANG === 'en' ? 'en-CA' : 'fr-CA'; };
+  document.documentElement.lang = window.LANG;
+
+  // ---- the list: exact sentences, sentences with {parts}, and phrases also replaced inside longer text
+  var COMMUN = [
+    ['Aujourd\'hui', 'Today'], ['Chargement…', 'Loading…'], ['Fermer', 'Close'], ['Annuler', 'Cancel'], ['oui', 'yes'], ['non', 'no'],
+    ['Contrôleurs', 'Controllers'], ['Superviseurs', 'Supervisors'], ['Contrôleur', 'Controller'], ['Superviseur', 'Supervisor'],
+  ];
+  var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  var norm = function (s) { return String(s).replace(/\s+/g, ' ').trim(); };
+  var exact, pats, phrMap, phrRe, memo, nLu = -1;
+  function compiler() {
+    nLu = (window.EN_PAGE || []).length;
+    exact = new Map(); pats = []; phrMap = new Map(); memo = new Map();
+    COMMUN.concat(window.EN_PAGE || []).forEach(function (e) {
+      var k = norm(e[0]), en = e[1];
+      if (/\{\w+\}/.test(k)) {
+        var noms = [];
+        var src = k.split(/(\{\w+\})/).map(function (p) {
+          var m = /^\{(\w+)\}$/.exec(p);
+          if (m) { noms.push(m[1]); return /^ini/.test(m[1]) ? '([A-Z]{2,3})' : /^n\d*$/.test(m[1]) ? '([-+−]?\\d+(?:[.,]\\d+)?)' : '([\\s\\S]+?)'; }
+          return esc(p);
+        }).join('');
+        pats.push({ re: new RegExp('^' + src + '$'), noms: noms, en: en, poids: k.replace(/\{\w+\}/g, '').length });
+      } else {
+        exact.set(k, en);
+        if (k.indexOf(' ') > 0 && k.length >= 6) phrMap.set(k, en);
+      }
+    });
+    pats.sort(function (a, b) { return b.poids - a.poids; });
+    var ph = Array.from(phrMap.keys()).sort(function (a, b) { return b.length - a.length; }).map(esc);
+    phrRe = ph.length ? new RegExp('(^|[^0-9A-Za-zÀ-ÿ_])(' + ph.join('|') + ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g') : null;
+  }
+  // French day and month names inside a changing part (dates written by the server): replaced word for word
+  var DATES = { 'dim.': 'Sun', 'lun.': 'Mon', 'mar.': 'Tue', 'mer.': 'Wed', 'jeu.': 'Thu', 'ven.': 'Fri', 'sam.': 'Sat',
+    dimanche: 'Sunday', lundi: 'Monday', mardi: 'Tuesday', mercredi: 'Wednesday', jeudi: 'Thursday', vendredi: 'Friday', samedi: 'Saturday',
+    'janv.': 'Jan', 'févr.': 'Feb', mars: 'Mar', 'avr.': 'Apr', mai: 'May', juin: 'Jun', 'juil.': 'Jul', 'août': 'Aug', 'sept.': 'Sep',
+    'oct.': 'Oct', 'nov.': 'Nov', 'déc.': 'Dec', janvier: 'January', 'février': 'February', avril: 'April', juillet: 'July',
+    septembre: 'September', octobre: 'October', novembre: 'November', 'décembre': 'December' };
+  var dateRe = new RegExp('(^|[^0-9A-Za-zÀ-ÿ_.])(' + Object.keys(DATES).sort(function (a, b) { return b.length - a.length; }).map(esc).join('|') +
+    ')(?=$|[^0-9A-Za-zÀ-ÿ_])', 'g');
+  function part(v, n) {                 // one changing part: its own translation, else each « ; » item, else dates only
+    if (n >= 3) return v;
+    var t = trad(v, n + 1);
+    if (t != null) return t;
+    if (v.indexOf(' ; ') > 0) return v.split(' ; ').map(function (x) { return part(x, n); }).join('; ');
+    return v.replace(dateRe, function (x, a, b) { return a + DATES[b]; });
+  }
+  function trad(s, n) {
+    if (!exact || nLu !== (window.EN_PAGE || []).length) compiler();
+    var k = norm(s);
+    if (k === ':' && /^\s/.test(s)) return ':' + /\s*$/.exec(s)[0];      // « Mise à jour : » → « Update: »
+    if (!k || !/[A-Za-zÀ-ÿ]/.test(k)) return null;
+    var r;
+    if (!n && memo.has(k)) r = memo.get(k);
+    else {
+      r = exact.get(k);
+      if (r === undefined) for (var i = 0; i < pats.length; i++) {
+        var p = pats[i], m = p.re.exec(k);
+        if (!m) continue;
+        r = p.en.replace(/\{(\w+)\}/g, function (x, nom) {
+          var j = p.noms.indexOf(nom);
+          return j < 0 ? x : part(m[j + 1], n);
+        });
+        break;
+      }
+      if (r === undefined && phrRe && /[a-zà-ÿ]/.test(k)) {
+        var chg = false;
+        var t2 = k.replace(phrRe, function (x, a, b) { chg = true; return a + phrMap.get(b); });
+        if (chg) r = t2;
+      }
+      if (r === undefined) r = null;
+      if (!n) memo.set(k, r);
+    }
+    if (r == null) return null;
+    var deb = /^\s*/.exec(s)[0];
+    if (/^[:;!?]/.test(r)) deb = '';                       // French space before « : » — none in English
+    return deb + r + /\s*$/.exec(s)[0];
+  }
+  // for code that needs a sentence outside the page (a dialog, the tab title): T('…') gives it in the current language
+  window.T = function (s) { if (window.LANG !== 'en') return s; var t = trad(s, 0); return t == null ? s : t; };
+
+  // ---- the page: every text and a few attributes; never what people type, nor marked parts (data-notr)
+  var ORIG = new WeakMap(), AORIG = new WeakMap();
+  var ATTR = ['title', 'placeholder', 'aria-label', 'alt'];
+  var SAUTE = /^(SCRIPT|STYLE|TEXTAREA|NOSCRIPT)$/;
+  var bouton = function (el) { return el.tagName === 'INPUT' && /^(button|submit|reset)$/i.test(el.type); };
+  function saute(el) {
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) if (SAUTE.test(e.tagName) || e.hasAttribute('data-notr') || e.isContentEditable) return true;
+    return false;
+  }
+  function texte(nd) {
+    var v = nd.nodeValue, o = ORIG.get(nd);
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) { if (o) ORIG.delete(nd); return; }
+    ORIG.set(nd, [v, en]); nd.nodeValue = en;
+  }
+  function un(el, a) {
+    var v = el.getAttribute(a);
+    if (v == null) return;
+    var m = AORIG.get(el), o = m && m[a];
+    if (o && v === o[1]) return;
+    var en = trad(v, 0);
+    if (en == null || en === v) return;
+    if (!m) AORIG.set(el, m = {});
+    m[a] = [v, en]; el.setAttribute(a, en);
+  }
+  function attrs(el) {
+    for (var i = 0; i < ATTR.length; i++) if (el.hasAttribute(ATTR[i])) un(el, ATTR[i]);
+    if (bouton(el)) un(el, 'value');
+  }
+  function parcourir(r) {
+    if (!r) return;
+    if (r.nodeType === 3) { if (!saute(r.parentElement)) texte(r); return; }
+    if (r.nodeType !== 1) return;
+    if (saute(r)) { if (r.tagName === 'TEXTAREA' && !saute(r.parentElement)) attrs(r); return; }
+    attrs(r);
+    var w = document.createTreeWalker(r, 5, { acceptNode: function (n) {
+      if (n.nodeType !== 1 || !(SAUTE.test(n.tagName) || n.hasAttribute('data-notr') || n.isContentEditable)) return 1;
+      if (n.tagName === 'TEXTAREA' && !n.hasAttribute('data-notr')) attrs(n);       // its placeholder, never what's typed
+      return 2; } });
+    for (var n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) texte(n); else attrs(n); }
+  }
+  function remettre() {
+    var w = document.createTreeWalker(document.documentElement, 5);
+    for (var n = w.currentNode; n; n = w.nextNode()) {
+      if (n.nodeType === 3) { var o = ORIG.get(n); if (o) { if (n.nodeValue === o[1]) n.nodeValue = o[0]; ORIG.delete(n); } }
+      else { var m = AORIG.get(n); if (m) { for (var a in m) if (n.getAttribute(a) === m[a][1]) n.setAttribute(a, m[a][0]); AORIG.delete(n); } }
+    }
+  }
+  new MutationObserver(function (ms) {
+    if (window.LANG !== 'en') return;
+    ms.forEach(function (m) {
+      if (m.type === 'childList') m.addedNodes.forEach(parcourir);
+      else if (m.type === 'characterData') { if (!saute(m.target.parentElement)) texte(m.target); }
+      else if (m.target.nodeType === 1 && !saute(m.target.parentElement) && !/^(SCRIPT|STYLE)$/.test(m.target.tagName) &&
+        (m.attributeName !== 'value' || bouton(m.target))) un(m.target, m.attributeName);
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true,
+    attributeFilter: ATTR.concat('value') });
+
+  // ---- the switch, upper right
+  function maj() {
+    var d = document.getElementById('stlLang');
+    if (d) Array.prototype.forEach.call(d.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.getAttribute('data-l') === window.LANG); });
+  }
+  function poser(l) {
+    if (l === window.LANG) return;
+    window.LANG = l; lsSet(l); document.documentElement.lang = l; maj();
+    if (l === 'fr') remettre();
+    try { if (typeof window.surLangue === 'function') window.surLangue(l); } catch (e) { console.log('surLangue : ' + e); }
+    if (l === 'en') parcourir(document.documentElement);
+  }
+  window.poserLangue = poser;
+  // the page's HTML in French (for « Plein écran », which writes the page into a new tab: it then shows in the chosen language)
+  window.htmlFr = function () {
+    if (window.LANG !== 'en') return document.documentElement.outerHTML;
+    remettre();
+    var h = document.documentElement.outerHTML;
+    parcourir(document.documentElement);
+    return h;
+  };
+  function boutons() {
+    if (document.getElementById('stlLang') || !document.body) return;
+    var d = document.createElement('div');
+    d.id = 'stlLang'; d.setAttribute('data-notr', ''); d.setAttribute('translate', 'no');
+    d.innerHTML = '<button type="button" data-l="fr" title="Français">FR</button><button type="button" data-l="en" title="English">EN</button>';
+    d.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) poser(b.getAttribute('data-l')); });
+    var ici = document.querySelector('[data-langue-ici]');     // the page's own header row, if it has one (and it's shown)
+    if (ici && !ici.getClientRects().length) ici = null;
+    if (ici) { d.className = 'dans'; ici.appendChild(d); }
+    else { d.className = 'rangee'; document.body.insertBefore(d, document.body.firstChild); }   // a thin row of its own, upper right
+    maj();
+  }
+  function init() { boutons(); if (window.LANG === 'en') parcourir(document.documentElement); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<!-- LANGUE:fin -->
+<!-- EN:debut — the English of this page (source: outils/en/) -->
+<script>
+window.EN_PAGE = [
+// shared by every page
+['En test', 'Testing'],
+[': cette page est encore en développement. Vérifie avant de t\'y fier et signale tout problème à UK.', ': this page is still being developed. Double-check before relying on it, and report any problem to UK.'],
+['Données d\'exemple', 'Sample data'],
+['Mis à jour {d}', 'Updated {d}'], ['Mis à jour', 'Updated'], ['Mis à jour : {d}', 'Updated: {d}'],
+['Envoyer', 'Send'], ['Envoi…', 'Sending…'], ['— choisir —', '— choose —'], ['Initiales', 'Initials'],
+['Trop de demandes pour le moment : réessaie dans une heure.', 'Too many requests right now: try again in an hour.'],
+['Envoi impossible pour le moment. Réessaie dans quelques minutes.', 'Can\'t send right now. Try again in a few minutes.'],
+['Initiales inconnues.', 'Unknown initials.'],
+// leave types (from the sheet)
+['Congé', 'Leave'], ['congé', 'leave'], ['Autofinancé', 'Self-funded leave'], ['Parental', 'Parental leave'], ['Formation / affectation', 'Training / assignment'],
+['Sans solde', 'Unpaid leave'], ['Retraite / départ', 'Retirement / departure'], ['Fin de contrat', 'End of contract'],
+['Congé prolongé', 'Extended leave'], ['Autre', 'Other'], ['Maladie', 'Sick leave'],
+// paid holidays (Setup tab)
+['Jour de l\'An', 'New Year\'s Day'], ['Vendredi saint', 'Good Friday'], ['Lundi de Pâques', 'Easter Monday'], ['Fête de la Reine', 'Victoria Day'],
+['Fête de la St-Jean', 'St-Jean-Baptiste Day'], ['Fête du Canada', 'Canada Day'], ['Fête du Travail', 'Labour Day'],
+['Vérité et réconciliation', 'Truth and Reconciliation Day'], ['Action de grâce', 'Thanksgiving'], ['Jour du Souvenir', 'Remembrance Day'],
+['Noël', 'Christmas'], ['Lendemain de Noël', 'Boxing Day'], ['Journée nationale des patriotes', 'National Patriots\' Day'],
+['Horaire St-Laurent', 'St-Laurent schedule'], ['Plan du jour — St-Laurent', 'Daily plan — St-Laurent'],
+['Précédent', 'Previous'], ['Suivant', 'Next'], ['Choisir les personnes à afficher', 'Choose who to show'],
+['Tout le monde ▾', 'Everyone ▾'], ['Tout le monde', 'Everyone'], ['Tous', 'All'], ['{n} personnes ▾', '{n} people ▾'], ['{n} personnes', '{n} people'],
+['Shifts en banque', 'Bank shifts'], ['Congés', 'Days off'], ['Vue', 'View'], ['Mois', 'Month'], ['Semaine', 'Week'], ['Sem.', 'Wk'], ['Jour', 'Day'],
+['Ce que veulent dire les couleurs', 'What the colours mean'], ['Légende', 'Legend'],
+['Ouvrir l\'horaire dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the schedule in a new tab, full screen width'],
+['Plein écran', 'Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
+// shift groups and kinds
+['Nooner', 'Nooner'], ['Soir', 'Evening'], ['Nuit', 'Night'], ['jour', 'day'], ['nooner', 'nooner'], ['soir', 'evening'], ['nuit', 'night'],
+['Autre activité (formation…)', 'Other activity (training…)'], ['Superviseur (S)', 'Supervisor (S)'], ['Stagiaire', 'Trainee'], ['stagiaire', 'trainee'],
+['quart prolongé', 'extended shift'], ['Quart prolongé', 'Extended shift'], ['$ Temps supplémentaire', '$ Overtime'],
+['autre activité', 'other activity'], ['Autre activité', 'Other activity'], ['Formation OJT', 'OJT training'],
+// hover texts
+['commence à minuit (nuit du {a} au {b})', 'starts at midnight (night of {a} to {b})'],
+['commence à minuit le {d} (nuit du {a} au {b})', 'starts at midnight on {d} (night of {a} to {b})'],
+['commence à minuit, {d}', 'starts at midnight, {d}'], ['fin de la nuit du {d}', 'end of the night of {d}'],
+['Férié payé 1,5x : {f}', 'Stat holiday paid 1.5x: {f}'], ['Férié payé 1,5x', 'Stat holiday paid 1.5x'],
+['Relâche : {r}', 'Spring break: {r}'], ['Relâche scolaire', 'School spring break'], ['Voir la journée', 'See the day'],
+// month / week / day views
+['fin de nuit', 'end of night'], ['à minuit', 'at midnight'], ['· à minuit', '· at midnight'],
+['Shift en banque : {a} - {b} {d}', 'Bank shift: {a} - {b} {d}'], ['Shift en banque partiel : {a} - {b} {d}', 'Partial bank shift: {a} - {b} {d}'],
+['Libre {c}', 'Open {c}'], ['Libre {a} - {b}', 'Open {a} - {b}'], ['Libre', 'Open'], ['Libres', 'Open'], ['Partiel', 'Partial'],
+['complets / partiels', 'full / partial'], ['Complet {a} - {b} {d}', 'Full {a} - {b} {d}'], ['Partiel {a} - {b} {d}', 'Partial {a} - {b} {d}'],
+['Congé', 'Off'], ['congé', 'off'], ['{ini} en congé', '{ini} off'], ['En congé', 'Off'], ['+ {n} de plus', '+ {n} more'],
+['Aucun quart ce jour-là.', 'No shifts that day.'], ['Horaire pas encore publié pour cette date.', 'Schedule not published yet for this date.'],
+['1 quart — {x}', '1 shift — {x}'], ['{n} quarts — {x}', '{n} shifts — {x}'], ['En congé : {x}', 'Off: {x}'],
+['{d} · {f} (férié payé 1,5x) · relâche scolaire', '{d} · {f} (stat holiday paid 1.5x) · school spring break'],
+['{d} · {f} (férié payé 1,5x)', '{d} · {f} (stat holiday paid 1.5x)'], ['{d} · relâche scolaire', '{d} · school spring break'],
+// popups
+['Fermer', 'Close'], ['Voir tout le monde', 'Show everyone'], ['Retirer {ini}', 'Remove {ini}'], ['Ne voir que {ini}', 'Show only {ini}'], ['Ajouter {ini}', 'Add {ini}'],
+['Commence à minuit le {d} · nuit du {a} au {b}', 'Starts at midnight on {d} · night of {a} to {b}'],
+['{d} · commence à minuit (fait partie du soir d\'avant)', '{d} · starts at midnight (part of the evening before)'],
+['{t} · finit le lendemain', '{t} · ends the next day'], ['Heures en plus ({g})', 'Extra hours ({g})'], ['Activité :', 'Activity:'],
+['Semaine du {d}', 'Week of {d}'],
+['Personnes à afficher', 'People to show'], ['Cochez une ou plusieurs personnes. Aucune case = tout le monde.', 'Tick one or more people. No box ticked = everyone.'],
+// legend
+['Autre activité (formation…) : texte après les initiales', 'Other activity (training…): text after the initials'],
+['Deux couleurs = quart prolongé ou partagé entre deux activités', 'Two colours = extended shift, or split between two activities'],
+['Libre complet (8 h 30 en OT)', 'Full open shift (8 h 30 of OT)'], ['Libre partiel', 'Partial open shift'], ['Hachuré = pas encore publié', 'Hatched = not published yet'],
+['pâli = fin d\'une nuit commencée la veille', 'faded = end of a night that started the day before'],
+['Gris = congé du cycle 5-4 de la personne choisie', 'Grey = day off in the chosen person\'s 5-4 cycle'],
+['Date en rouge = férié payé 1,5x', 'Date in red = stat holiday paid 1.5x'],
+['Trait mauve en haut du jour = relâche scolaire (repère)', 'Purple line at the top of the day = school spring break (for reference)'],
+// status line
+['Données d\'exemple (initiales fictives) — ajoutez le lien dans CONFIG.url.', 'Sample data (made-up initials) — add the link in CONFIG.url.'],
+['Dernière mise à jour', 'Last update'], ['Mise à jour', 'Update'], ['Dernière mise à jour ESS', 'Last ESS update'], ['Mise à jour ESS', 'ESS update'],
+[': {x}', ': {x}'],
+['(publiée par ESS à {t}) · vérifié {d}', '(published by ESS at {t}) · checked {d}'], ['· vérifié {d}', '· checked {d}'],
+['horaire publié jusqu\'au {d}', 'schedule published until {d}'],
+['cycle 5-4 : chargement…', '5-4 cycle: loading…'], ['cycle 5-4 : équipe {n}', '5-4 cycle: team {n}'],
+['cycle 5-4 : équipe {n} (en congé)', '5-4 cycle: team {n} (on leave)'], ['cycle 5-4 : équipe {n} (en congé jusqu\'au {d})', '5-4 cycle: team {n} (on leave until {d})'],
+['cycle 5-4 : équipe {n} (en congé : {t})', '5-4 cycle: team {n} (on leave: {t})'],
+['cycle 5-4 : équipe {n} (en congé : {t} jusqu\'au {d})', '5-4 cycle: team {n} (on leave: {t} until {d})'],
+['cycle 5-4 : équipe {n} (congé à venir du {a} au {b})', '5-4 cycle: team {n} (upcoming leave {a} to {b})'],
+['cycle 5-4 : équipe {n} (congé à venir dès le {d})', '5-4 cycle: team {n} (upcoming leave from {d})'],
+['cycle 5-4 : {e}', '5-4 cycle: {e}'], ['réponse inattendue', 'unexpected answer'], ['réponse inattendue ({e})', 'unexpected answer ({e})'], ['chargement impossible', 'can\'t load'],
+['{ini} absent de la liste Cycles 5-4', '{ini} not in the 5-4 Cycles list'],
+['· cliquez un quart pour voir les détails', '· click a shift to see the details'],
+['Dernier changement à l\'horaire', 'Last schedule change'], ['Dernier changement', 'Last change'], ['Publié par ESS à {t}', 'Published by ESS at {t}'],
+['mise à jour ESS du', 'ESS update of'], ['({n} personnes)', '({n} people)'],
+['Dernier changement à l\'horaire : aucun depuis le {d}', 'Last schedule change: none since {d}'],
+['Prochaine mise à jour ESS : {a}, sur le site vers {b} —', 'Next ESS update: {a}, on the site around {b} —'],
+['Prochaine mise à jour ESS : {a}, sur le site vers {b} :', 'Next ESS update: {a}, on the site around {b}:'],
+['prochaine mise à jour', 'next update'], ['dans {h} h {m}', 'in {h} h {m}'], ['dans {n} min', 'in {n} min'],
+['pas encore arrivée ·', 'not here yet ·'], ['devrait être arrivée ·', 'should be here ·'], ['Rafraîchir', 'Refresh'], ['Rafraîchissement…', 'Refreshing…'],
+['demain', 'tomorrow'], ['mise à jour impossible ({w})', 'update failed ({w})'],
+['Impossible de charger l\'horaire ({w}).', 'Can\'t load the schedule ({w}).'], ['Réessayez dans quelques minutes.', 'Try again in a few minutes.'],
+['Si la page marche dans une fenêtre privée : désactivez votre bloqueur de pubs pour ce site, ou déconnectez vos autres comptes Google dans ce navigateur.',
+ 'If the page works in a private window: turn off your ad blocker for this site, or sign out of your other Google accounts in this browser.'],
+['le serveur ne répond pas', 'the server isn\'t answering'], ['lien inaccessible', 'link unreachable'],
+// daily plan
+['Plan du jour', 'Daily plan'], ['bêta', 'beta'],
+['En test : un brouillon calculé à partir de l\'horaire ESS, pas le plan officiel. Le superviseur décide.', 'Testing: a draft calculated from the ESS schedule, not the official plan. The supervisor decides.'],
+['Jour précédent', 'Previous day'], ['Jour suivant', 'Next day'], ['Positions', 'Positions'], ['Par personne', 'By person'], ['Texte', 'Text'],
+['Copier', 'Copy'], ['Copié ✓', 'Copied ✓'], ['Sélectionné : Ctrl+C', 'Selected: Ctrl+C'], ['Pas comptés :', 'Not counted:'],
+['Personne à l\'horaire.', 'Nobody on the schedule.'], ['1 position seulement', '1 position only'], ['(1 position seulement)', '(1 position only)'],
+['Optionnel : selon le trafic', 'Optional: depending on traffic'], ['{ini} {t} (optionnel)', '{ini} {t} (optional)'], ['Plan du {d}', 'Plan for {d}'],
+['personne comptée · décoche quelqu\'un qui ne sera pas là.', 'person counted · untick anyone who won\'t be there.'],
+['personnes comptées · décoche quelqu\'un qui ne sera pas là.', 'people counted · untick anyone who won\'t be there.'],
+['Superviseurs (S) : assis seulement s\'il le faut pour garder le minimum de positions.', 'Supervisors (S): only sit if needed to keep the minimum number of positions.'],
+['Assis jusqu\'à 45 min avant la fin du quart (30 en OT), 1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu\'à 2 h, puis 23 h).',
+ 'Sitting until 45 min before the end of the shift (30 on OT), 1 h sitting / 1 h break, breaks of 45 then 30 min when short-staffed; at night, 1 position (22:15 until 2:00, then 23:00).'],
+['Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.', 'Tap a person to see their turns. The text (Text tab) can be edited before copying.'],
+[': deux côtés qui alternent d\'heure en heure comme sur les vrais plans (05:45 et heures impaires / 06:15 et heures paires, bascule 13:00-13:30 / 13:30-14:00), chacun reste sur son côté ; on change quelqu\'un de côté seulement s\'il manque une position. Quelqu\'un qui arrive en cours d\'heure s\'assoit tout de suite plutôt que d\'attendre plus d\'une heure. Pas de longues pauses : quelqu\'un qui resterait plus de 1 h 30 sans s\'asseoir s\'assoit (une position de plus, jusqu\'à 5). Entre parenthèses, « (XV) » : optionnel, selon le trafic (un superviseur qui aide pour garder 3 positions).',
+ ': two sides alternating every hour like the real plans (05:45 and odd hours / 06:15 and even hours, switch 13:00-13:30 / 13:30-14:00), everyone stays on their side; someone only changes sides if a position is missing. Someone arriving mid-hour sits right away rather than waiting more than an hour. No long breaks: someone who would go more than 1 h 30 without sitting sits (one more position, up to 5). In brackets, “(XV)”: optional, depending on traffic (a supervisor helping to keep 3 positions).'],
+// activities (ESS)
+['Admin', 'Admin'], ['Coverage', 'Coverage'], ['Nat Refresher', 'Nat Refresher'],
+['Cadre {a} px · écran {b} · tactile seulement : {c} · affichage réduit : {d} · compact : {e}', 'Frame {a} px · screen {b} · touch only: {c} · shrunk view: {d} · compact: {e}'],
+['oui (échelle)', 'yes (scale)'], ['oui (zoom)', 'yes (zoom)'],
+];
+</script>
+<!-- EN:fin -->
 <!--
   Horaire de l'équipe — St-Laurent
   À coller dans un élément « Embed HTML » (Intégrer du code) de la page Wix.
@@ -321,7 +643,7 @@
       <h1 id="range"></h1>
     </div>
     <div class="grow"></div>
-    <div class="grp">
+    <div class="grp" data-langue-ici>
       <button class="btn" id="who" aria-haspopup="dialog" title="Choisir les personnes à afficher">Tout le monde ▾</button>
       <label class="tog"><input type="checkbox" id="libres"> Shifts en banque</label>
       <label class="tog"><input type="checkbox" id="conges"> Congés</label>
@@ -342,7 +664,7 @@
 
 <script>
 // A copy of this whole page as it was loaded, for the « Plein écran » button (taken before anything is drawn)
-const PAGE_SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
+const PAGE_SOURCE = '<!doctype html>\n' + (window.htmlFr ? htmlFr() : document.documentElement.outerHTML);
 /* =====================================================================================
    CONFIG — ce qu'on change le plus souvent
    ===================================================================================== */
@@ -412,10 +734,11 @@ const addDays = (d, k) => { const x = toUTC(d); x.setUTCDate(x.getUTCDate() + k)
 const dow = d => (toUTC(d).getUTCDay() - CONFIG.debutSemaine + 7) % 7;
 const debutDe = d => addDays(d, -dow(d));                             // first day of d's week
 const estWE = d => toUTC(d).getUTCDay() % 6 === 0;                    // Saturday or Sunday
-const JSEM = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'], utcDow = d => toUTC(d).getUTCDay();
+const JSEM_FR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'], JSEM_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const JSEM = new Proxy([], { get: (x, k) => (LANG === 'en' ? JSEM_EN : JSEM_FR)[k] }), utcDow = d => toUTC(d).getUTCDay();
 const firstOfMonth = d => d.slice(0, 8) + '01';
 const addMonths = (d, k) => { const x = toUTC(firstOfMonth(d)); x.setUTCMonth(x.getUTCMonth() + k); return fromUTC(x); };
-const fmt = (d, o) => new Intl.DateTimeFormat('fr-CA', Object.assign({ timeZone: 'UTC' }, o)).format(toUTC(d));
+const fmt = (d, o) => new Intl.DateTimeFormat(LOC(), Object.assign({ timeZone: 'UTC' }, o)).format(toUTC(d));
 const mins = a => +a.slice(0, 2) * 60 + +a.slice(2);                 // « 0615 » → 375
 const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + String(m % 60).padStart(2, '0');   // 375 → « 0615 »
 const hm = a => a.slice(0, 2) + ':' + a.slice(2);                    // « 0615 » → « 06:15 »
@@ -473,10 +796,10 @@ const nomQ = q => q.who + (q.f & 2 ? ' (S)' : '');
 const labelQ = q => nomQ(q) + (q.act ? ' ' + q.act : '');
 // times in 24 h, with $ in front for overtime: « $06:15 - 15:00 »
 const heures = q => (q.f & 1 ? '$' : '') + hm(q.a) + ' - ' + hm(q.b);
-const titreQ = q => `${nomQ(q)} · ${heures(q)}` + (q.act ? ` · ${q.act}` : '') + (q.f & 1 ? ' · OT' : '') +
-  (estStag(q.who) ? ' · stagiaire' : '') + (q.prolonge ? ' · quart prolongé' : '') +
-  (minuitQ(q) ? ` · commence à minuit (nuit du ${fmt(addDays(q.day, -1), { weekday: 'long', day: 'numeric' })} au ${fmt(q.day, { day: 'numeric' })})` : '') +
-  (q.minuit ? ` · commence à minuit le ${fmt(q.jour, { weekday: 'long', day: 'numeric' })} (nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} au ${fmt(q.jour, { day: 'numeric' })})` : '');
+const titreQ = q => `${nomQ(q)} · ${heures(q)}` + (q.act ? ` · ${T(q.act)}` : '') + (q.f & 1 ? ' · OT' : '') +
+  (estStag(q.who) ? ' · ' + T('stagiaire') : '') + (q.prolonge ? ' · ' + T('quart prolongé') : '') +
+  (minuitQ(q) ? ' · ' + T(`commence à minuit (nuit du ${fmt(addDays(q.day, -1), { weekday: 'long', day: 'numeric' })} au ${fmt(q.day, { day: 'numeric' })})`) : '') +
+  (q.minuit ? ' · ' + T(`commence à minuit le ${fmt(q.jour, { weekday: 'long', day: 'numeric' })} (nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} au ${fmt(q.jour, { day: 'numeric' })})`) : '');
 
 /* =====================================================================================
    État
@@ -576,9 +899,9 @@ const suitesMois = () => S.sel.length > 0 && S.sel.length <= CONFIG.debordeMoisM
 const minuitQ = q => CONFIG.minuitVeille && !CONFIG.minuitAvant && !CONFIG.nuitLendemain && q.off === 0;
 const minuits = (d, w) => (S.byDay[addDays(d, 1)] || [])
   .filter(q => minuitQ(q) && (w ? q.who === w : choisi(q.who))).sort((x, y) => x.fin - y.fin || (x.who < y.who ? -1 : 1));
-const titreMinuit = q => `${nomQ(q)} · commence à minuit, ${fmt(q.day, { weekday: 'long', day: 'numeric' })} · ${heures(q)}`;
-const titreSuite = q => `${nomQ(q)} · fin de la nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })} · ${heures(q)}` +
-  (q.act ? ` · ${q.act}` : '');
+const titreMinuit = q => `${nomQ(q)} · ${T(`commence à minuit, ${fmt(q.day, { weekday: 'long', day: 'numeric' })}`)} · ${heures(q)}`;
+const titreSuite = q => `${nomQ(q)} · ${T(`fin de la nuit du ${fmt(q.day, { weekday: 'long', day: 'numeric' })}`)} · ${heures(q)}` +
+  (q.act ? ` · ${T(q.act)}` : '');
 
 /* =====================================================================================
    Vue Mois
@@ -605,7 +928,7 @@ function grilleMois(cur, empile) {
     if (S.who && congeCycle(S.who, d)) cls.push('off');
     if (estRelache(d)) cls.push('rel');
     h += `<div class="${cls.join(' ')}"${narrow ? ` data-day="${d}"` : ''}>` +
-      `<span class="num${S.feries[d] ? ' fer' : ''}" data-day="${d}" title="${S.feries[d] ? 'Férié payé 1,5x : ' + esc(S.feries[d]) + ' · ' : ''}${estRelache(d) ? esc(titreRelache(d)) + ' · ' : ''}Voir la journée">${+d.slice(8)}</span>` +
+      `<span class="num${S.feries[d] ? ' fer' : ''}" data-day="${d}" title="${esc([S.feries[d] ? 'Férié payé 1,5x : ' + S.feries[d] : '', estRelache(d) ? titreRelache(d) : '', 'Voir la journée'].filter(Boolean).map(T).join(' · '))}">${+d.slice(8)}</span>` +
       `<span class="jsem" aria-hidden="true">${JSEM[utcDow(d)]}</span>` +
       (S.feries[d] ? `<span class="fnom" title="Férié payé 1,5x">${esc(S.feries[d])}</span>` : '');
     h += narrow ? caseEtroite(d) : caseLarge(d);
@@ -707,7 +1030,7 @@ function vueSemaine() {
   const gens = S.sel.filter(w => tous.includes(w)).concat(tous.filter(w => !S.sel.includes(w)));
   let h = '<table class="week"><thead><tr><th class="who"></th>';
   for (const d of jours) h += `<th class="${d === today ? 'today' : ''}${S.feries[d] ? ' fer' : ''}${estRelache(d) ? ' rel' : ''}" data-day="${d}" style="cursor:pointer"` +
-    `${S.feries[d] || estRelache(d) ? ` title="${[S.feries[d] ? 'Férié payé 1,5x : ' + esc(S.feries[d]) : '', estRelache(d) ? esc(titreRelache(d)) : ''].filter(Boolean).join(' · ')}"` : ''}>` +
+    `${S.feries[d] || estRelache(d) ? ` title="${esc([S.feries[d] ? 'Férié payé 1,5x : ' + S.feries[d] : '', estRelache(d) ? titreRelache(d) : ''].filter(Boolean).map(T).join(' · '))}"` : ''}>` +
     `${fmt(d, { weekday: 'short' })}<span class="d">${+d.slice(8)}</span>` +
     `${S.feries[d] ? `<span class="fn">${esc(S.feries[d])}</span>` : ''}</th>`;
   h += '</tr></thead><tbody>';
@@ -736,8 +1059,8 @@ function vueSemaine() {
     for (const d of jours) {
       const l = S.libreDay[d] || [];
       const c = l.filter(x => x.code).reduce((s, x) => s + x.places, 0), p = l.filter(x => !x.code).reduce((s, x) => s + x.places, 0);
-      const det = l.map(x => `${x.code ? 'Libre ' + x.code : 'Partiel ' + hm(x.a) + ' - ' + hm(x.b)} ${dureeL(x)}${x.places > 1 ? ' ×' + x.places : ''}`).join('\n');
-      h += `<td title="${det ? esc(det) : 'complets / partiels'}">${c ? `<span style="color:var(--libre)">${c}</span>` : ''}` +
+      const det = l.map(x => `${x.code ? T('Libre') + ' ' + x.code : T('Partiel') + ' ' + hm(x.a) + ' - ' + hm(x.b)} ${dureeL(x)}${x.places > 1 ? ' ×' + x.places : ''}`).join('\n');
+      h += `<td title="${det ? esc(det) : T('complets / partiels')}">${c ? `<span style="color:var(--libre)">${c}</span>` : ''}` +
         `${c && p ? ' · ' : ''}${p ? `<span style="color:var(--partiel)">${p}p</span>` : ''}</td>`;
     }
     h += '</tr>';
@@ -788,7 +1111,7 @@ function vueJour() {
   const n = {};
   for (const q of qs) n[q.g.lettre] = (n[q.g.lettre] || 0) + 1;
   h += `<div class="sum">${qs.length} quart${qs.length > 1 ? 's' : ''} — ` +
-    CONFIG.groupes.filter(g => n[g.lettre]).map(g => `${g.nom} ${n[g.lettre]}`).join(' · ') +
+    CONFIG.groupes.filter(g => n[g.lettre]).map(g => `${T(g.nom)} ${n[g.lettre]}`).join(' · ') +
     (cg.length ? `<br>En congé : ${cg.join(' ')}` : '') + '</div>';
   return h + '</div>';
 }
@@ -813,8 +1136,8 @@ function boutons(w, d) {
 function popQuart(q) {
   const c = couleurQ(q);
   // first tag = what gives the colour, then the time group and any other marks
-  const tags = [`<span style="background:${c.teinte}">${esc(c === q.g ? `${q.g.nom} (${q.g.lettre})` : c.nom)}</span>`];
-  if (c !== q.g) tags.push(`<span>${q.g.nom} (${q.g.lettre})</span>`);
+  const tags = [`<span style="background:${c.teinte}">${esc(c === q.g ? `${T(q.g.nom)} (${q.g.lettre})` : c.nom)}</span>`];
+  if (c !== q.g) tags.push(`<span>${T(q.g.nom)} (${q.g.lettre})</span>`);
   if ((q.f & 2) && c !== CONFIG.superviseur) tags.push(`<span>${CONFIG.superviseur.nom}</span>`);
   if (q.f & 1) tags.push('<span>$ Temps supplémentaire</span>');
   if (q.prolonge) tags.push('<span>Quart prolongé</span>');
@@ -829,7 +1152,7 @@ function popQuart(q) {
             `<span class="j">${hm(p.a)} - ${hm(p.b)}</span><span>${esc(p.nom)}</span></li>`; }).join('') + '</ul>'
       : (q.prolonge ? (() => {
           const P = q.prolonge, t = m => hm(hhmm((mins(q.a) + m) % 1440)), c = couleurQ(q);
-          const rows = [[P.normal, c, `${q.g.nom} (${q.g.lettre})`], [P.extra, P.gx, `Heures en plus (${P.gx.nom.toLowerCase()})`]]
+          const rows = [[P.normal, c, `${T(q.g.nom)} (${q.g.lettre})`], [P.extra, P.gx, T(`Heures en plus (${P.gx.nom.toLowerCase()})`)]]
             .sort((x, y) => x[0][0] - y[0][0]);
           return '<ul class="parts">' + rows.map(([r, col, nom]) =>
             `<li><i class="sq" style="background:${col.teinte};border-color:${col.couleur}"></i>` +
@@ -917,7 +1240,7 @@ document.getElementById('pop').addEventListener('click', e => {
 function afficher(garderPop) {
   if (CONFIG.mode === 'plan') {                      // the Plan du jour page: the plan of the chosen day (today at first)
     S.planJour = S.planJour || nowLocal().d;
-    document.title = 'Plan du jour — St-Laurent';
+    document.title = T('Plan du jour — St-Laurent');
     document.getElementById('view').innerHTML = '<div class="plan-page">' + htmlDuPlan(S.planJour) + '</div>';
     return;
   }
@@ -972,7 +1295,7 @@ function popFiltre() {
 }
 
 function legende() {
-  let h = CONFIG.groupes.map(g => `<span><i class="dot" style="--c:${g.couleur}"></i>${g.nom} (${g.lettre})</span>`).join('');
+  let h = CONFIG.groupes.map(g => `<span><i class="dot" style="--c:${g.couleur}"></i>${T(g.nom)} (${g.lettre})</span>`).join('');
   h += `<span><i class="dot" style="--c:${CONFIG.superviseur.couleur}"></i>${CONFIG.superviseur.nom}</span>`;
   h += `<span><i class="dot" style="--c:${CONFIG.stagiaire.couleur}"></i>${CONFIG.stagiaire.nom}</span>`;
   h += `<span><i class="dot" style="--c:${CONFIG.autre.couleur}"></i>${CONFIG.autre.nom} : texte après les initiales</span>`;
@@ -1020,15 +1343,16 @@ function cycleInfo() {
       : proch ? ` (congé à venir ${proch[2] ? `du ${jl(proch[1])} au ${jl(proch[2])}` : `dès le ${jl(proch[1])}`})` : '');
   }
   else t = `${esc(w)} absent de la liste Cycles 5-4`;
-  return ` · ${t}`;
+  return ` · <span>${t}</span>`;
 }
 
 // « 15 nov. à 10 h 47 » from 'yyyy-MM-dd HH:mm'
-const quandESS = s => fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + (s.length >= 16 ? ` à ${+s.slice(11, 13)} h ${s.slice(14, 16)}` : '');
+const hmL = s => (LANG === 'en' ? `${+s.slice(11, 13)}:${s.slice(14, 16)}` : `${+s.slice(11, 13)} h ${s.slice(14, 16)}`);   // 10 h 47 / 10:47
+const quandESS = s => fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + (s.length >= 16 ? (LANG === 'en' ? ' at ' : ' à ') + hmL(s) : '');
 function statut() {
   const s = document.getElementById('status'), d = S.data;
   if (!d) return;
-  const pub = d.horizon ? ` · horaire publié jusqu'au ${fmt(d.horizon, { day: 'numeric', month: 'long' })}` : '';
+  const pub = d.horizon ? ` · <span>horaire publié jusqu'au ${fmt(d.horizon, { day: 'numeric', month: 'long' })}</span>` : '';
   s.innerHTML = (S.demo ? '<span class="demo">Données d\'exemple (initiales fictives) — ajoutez le lien dans CONFIG.url.</span> ' : '') +
     // last update = when the last ESS update reached the site (d.essVu), not our last check (d.at)
     (d.ess && d.essVu ? `<b><span class="lg">Dernière mise à jour</span><span class="ct">Mise à jour</span> : ${esc(quandESS(d.essVu))}</b>` +
@@ -1047,8 +1371,8 @@ function statut() {
    learned from what it has seen, so they follow ESS if it changes them. */
 const minDe = s => Date.parse(s.slice(0, 10) + 'T' + s.slice(11, 16) + ':00Z') / 60000;   // clock minutes
 const maintenant = () => { const n = nowLocal(); return n.d + ' ' + String(Math.floor(n.m / 60)).padStart(2, '0') + ':' + String(n.m % 60).padStart(2, '0'); };
-const heureDe = (s, ref) => (s.slice(0, 10) === ref.slice(0, 10) ? '' : s.slice(0, 10) === addDays(ref.slice(0, 10), 1) ? 'demain ' : fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + ' ') +
-  `${+s.slice(11, 13)} h ${s.slice(14, 16)}`;
+const heureDe = (s, ref) => (s.slice(0, 10) === ref.slice(0, 10) ? '' : s.slice(0, 10) === addDays(ref.slice(0, 10), 1) ? T('demain') + ' ' : fmt(s.slice(0, 10), { day: 'numeric', month: 'short' }) + ' ') +
+  hmL(s);
 function ligneChangement(d) {
   if (!('chg' in d) && !d.plan) return '';
   let t = '';
@@ -1077,7 +1401,7 @@ function compteARebours() {
   const quand = `<span class="lg">Prochaine mise à jour ESS : ${esc(heureDe(p[0], now))}, sur le site vers ${esc(heureDe(p[1], p[0]))} — </span>`;
   if (reste > 0) {
     const h = Math.floor(reste / 60), m = reste % 60;
-    el.innerHTML = quand + `<span class="ct">prochaine mise à jour </span>dans ${h ? h + ' h ' + String(m).padStart(2, '0') : m + ' min'}`;
+    el.innerHTML = quand + `<span class="ct">prochaine mise à jour </span><span>dans ${h ? h + ' h ' + String(m).padStart(2, '0') : m + ' min'}</span>`;
   } else {
     el.innerHTML = quand.replace(' — </span>', ' : </span>') + (S.verifie === p[0] ? '<span class="lg">pas encore arrivée · </span>' : '<span class="lg">devrait être arrivée · </span>') +
       '<button class="rafr" id="rafr">Rafraîchir</button>';
@@ -1787,8 +2111,8 @@ function vueDuPlan(day) {
 }
 function texteDuPlan(day) {
   const lignes = lignesDuPlan(day);
-  return `Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
-    (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  (1 position seulement)' : ''}`).join('\n') : 'Personne à l\'horaire.');
+  return T(`Plan du ${fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })}`) + '\n' +   // the text to copy: in the chosen language
+    (lignes.length ? lignes.map(([t, qui, note]) => `${hhmmP(t)} -> ${qui.join(' ') || '—'}${note ? '  ' + T('(1 position seulement)') : ''}`).join('\n') : T('Personne à l\'horaire.'));
 }
 function ouvrirPlan(el) {
   if (CONFIG.mode === 'plan') { afficher(); return; }
@@ -1814,7 +2138,7 @@ function htmlDuPlan(day) {
     `<div class="plan-act"><button data-plan="copier">Copier</button><span id="planCopie"></span></div>` +
     `<div class="plan-gens">${pris.map(p => `<label><input type="checkbox" data-plan="qui" value="${esc(p.i)}"${sans.includes(p.i) ? '' : ' checked'}> ${esc(p.i)} ` +
       `${p.sup ? '(S) ' : ''}<span class="hr">${p.ot ? '$' : ''}${hm(p.a)}</span></label>`).join('')}</div>` +
-    (hors.length ? `<div class="plan-hors">Pas comptés : ${hors.map(([w, r]) => `${esc(w)} (${esc(r)})`).join(', ')}</div>` : '') +
+    (hors.length ? `<div class="plan-hors">${T('Pas comptés :')} ${hors.map(([w, r]) => `${esc(w)} (${esc(T(r))})`).join(', ')}</div>` : '') +
     `<div class="plan-aide">${nb} personne${nb > 1 ? 's' : ''} comptée${nb > 1 ? 's' : ''} · décoche quelqu'un qui ne sera pas là. Superviseurs (S) : assis seulement s'il le faut pour garder le minimum de positions. Assis jusqu'à 45 min avant la fin du quart (30 en OT), ` +
     `1 h assis / 1 h de pause, pauses de 45 puis 30 min quand il manque du monde ; la nuit, 1 position (22 h 15 jusqu'à 2 h, puis 23 h). ` +
     `Touchez une personne pour voir ses tours. Le texte (onglet Texte) se modifie avant de copier.` +
@@ -1924,6 +2248,7 @@ ajusterTaille();
 legende();
 remplirFiltre();
 afficher();
+window.surLangue = () => { legende(); remplirFiltre(); afficher(); statut(); };   // FR/EN switch: dates, day names, legend, status line
 charger();
 chargerFeries();
 chargerCycles();          // ready before anyone is chosen
