@@ -323,6 +323,7 @@ window.EN_PAGE = [
 ['Admin', 'Admin'], ['Coverage', 'Coverage'], ['Nat Refresher', 'Nat Refresher'],
 ['Cadre {a} px · écran {b} · tactile seulement : {c} · affichage réduit : {d} · compact : {e}', 'Frame {a} px · screen {b} · touch only: {c} · shrunk view: {d} · compact: {e}'],
 ['oui (échelle)', 'yes (scale)'], ['oui (zoom)', 'yes (zoom)'],
+['Affichage allégé : la page avait planté sur ce téléphone · ', 'Lighter display: the page had crashed on this phone · '], ['Affichage allégé : la page avait planté sur ce téléphone', 'Lighter display: the page had crashed on this phone'], ['Revenir à l\'affichage normal', 'Back to the normal display'],
 ];
 </script>
 <!-- EN:fin -->
@@ -388,6 +389,8 @@ window.EN_PAGE = [
   #status { padding: 0 14px 6px; color: var(--muted); font-size: 12px; }
   #status .demo { color: #a50e0e; font-weight: 500; }
   #status .ligne2 { display: block; margin-top: 1px; }
+  #status .leger { color: #b06000; }
+  #status button.lien { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   #status .rafr { border: 0; background: none; padding: 0; font: inherit; color: var(--accent, #1a73e8); text-decoration: underline; cursor: pointer; }
 
   main { flex: 1 1 auto; overflow: auto; border-top: 1px solid var(--line); }
@@ -828,7 +831,25 @@ const mem = {
   const w = mem.get('who'); if (w) { S.sel = w.split(',').filter(Boolean); S.who = S.sel.length === 1 ? S.sel[0] : ''; }
   const l = mem.get('libres'); if (l !== null) S.libres = l === '1';
   const cg = mem.get('conges'); if (cg !== null) S.conges = cg === '1';
+  // Crash guard: Safari closes a page that runs out of memory (« Un problème récurrent est survenu ») and reopens it.
+  // A mark is left while a view is drawn and removed 3 s later (or when the page is closed normally); if it is still
+  // there when the page opens again, the page died while drawing → this phone gets the light (compact) layout for
+  // 30 days. « Revenir à l'affichage normal » in the status line undoes it.
+  try {
+    const x = JSON.parse(mem.get('dessin') || 'null');
+    if (x && Date.now() - x.t < 10 * 60000) { mem.set('leger', String(Date.now())); mem.set('plante', (x.d || '') + ' ' + (x.vue || '')); }
+  } catch (e) { /* ignore */ }
+  finDessin();
+  S.leger = +(mem.get('leger') || 0) > Date.now() - 30 * 864e5;
 })();
+function finDessin() { try { localStorage.removeItem('horaireStl.dessin'); } catch (e) { /* ignore */ } }
+let dessinT;
+function debutDessin() {
+  mem.set('dessin', JSON.stringify({ t: Date.now(), vue: S.vue, d: S.cur }));
+  clearTimeout(dessinT); dessinT = setTimeout(finDessin, 3000);
+}
+addEventListener('pagehide', finDessin);
+document.addEventListener('visibilitychange', () => { if (document.hidden) finDessin(); });   // app switch: not a crash
 
 /* =====================================================================================
    Données : indexation par jour
@@ -1266,6 +1287,7 @@ function afficher(garderPop) {
   } else r.textContent = fmt(S.cur, etroit() ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
     (S.feries[S.cur] ? ` · ${S.feries[S.cur]} (férié payé 1,5x)` : '') + (estRelache(S.cur) ? ' · relâche scolaire' : '');
   if (!S.data) return;
+  debutDessin();
   const keep = v.scrollTop;
   v.innerHTML = S.vue === 'mois' ? vueMois() : S.vue === 'semaine' ? vueSemaine() : vueJour();
   if (S.vue === 'mois' && S.who) remplirMois(v);
@@ -1366,7 +1388,11 @@ function statut() {
      : d.ess ? `<b><span class="lg">Dernière mise à jour ESS</span><span class="ct">Mise à jour ESS</span> : ${esc(quandESS(d.ess))}</b>` +
              `<span class="det"> · vérifié ${esc(d.at ? quandESS(d.at) : '?')}</span>`
            : `Mis à jour : ${esc(d.at || '?')}`) + pub + cycleInfo() + '<span class="tip"> · cliquez un quart pour voir les détails</span>' +
-    ligneChangement(d);
+    ligneChangement(d) +
+    (S.leger ? '<span class="ligne2 leger">Affichage allégé : la page avait planté sur ce téléphone · ' +
+      '<button type="button" id="bNormal" class="lien">Revenir à l\'affichage normal</button></span>' : '');
+  const bn = document.getElementById('bNormal');
+  if (bn) bn.onclick = () => { mem.set('leger', ''); S.leger = false; ajusterTaille(); statut(); afficher(); };
   compteARebours();
 }
 
@@ -1487,7 +1513,7 @@ const parEchelle = () => CONFIG.reduction === 'echelle' || (CONFIG.reduction !==
 // Phone-sized frame: under 640 px on a phone, or under 480 px on a computer (Wix's phone preview and
 // phone editor are about 320–400 px wide), so the preview looks like the real phone.
 const cadreTelephone = () => innerWidth < (estTelephone() ? 640 : 480);
-function mini() { return CONFIG.mode !== 'plan' && CONFIG.telephone === 'miniature' && innerWidth > 0 && cadreTelephone(); }   // the plan page: never shrunk
+function mini() { return CONFIG.mode !== 'plan' && !S.leger && CONFIG.telephone === 'miniature' && innerWidth > 0 && cadreTelephone(); }   // the plan page: never shrunk
 // compact layout: phones set to 'compact', or a very narrow frame on a computer
 function etroit() { return !mini() && cadreTelephone(); }
 let majPlein = () => {};                 // shows/hides « Plein écran » (set up at the end of the page)

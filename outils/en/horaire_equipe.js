@@ -87,3 +87,4 @@
 ['Admin', 'Admin'], ['Coverage', 'Coverage'], ['Nat Refresher', 'Nat Refresher'],
 ['Cadre {a} px · écran {b} · tactile seulement : {c} · affichage réduit : {d} · compact : {e}', 'Frame {a} px · screen {b} · touch only: {c} · shrunk view: {d} · compact: {e}'],
 ['oui (échelle)', 'yes (scale)'], ['oui (zoom)', 'yes (zoom)'],
+['Affichage allégé : la page avait planté sur ce téléphone · ', 'Lighter display: the page had crashed on this phone · '], ['Affichage allégé : la page avait planté sur ce téléphone', 'Lighter display: the page had crashed on this phone'], ['Revenir à l\'affichage normal', 'Back to the normal display'],
