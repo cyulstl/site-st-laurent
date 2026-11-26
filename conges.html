@@ -458,7 +458,7 @@ function ligneDuTemps(L) {
   let mois = CONFIG.moisLigne;
   const fins = L.map(c => c.fin || c.debut).filter(Boolean).sort();
   const dern = fins[fins.length - 1];
-  if (dern) { const [y, m] = dern.split('-').map(Number), k = (y - n.getFullYear()) * 12 + (m - 1 - n.getMonth()) + 2; mois = Math.min(48, Math.max(mois, k)); }
+  if (dern) { const [y, m] = dern.split('-').map(Number), k = (y - n.getFullYear()) * 12 + (m - 1 - n.getMonth()) + 2; mois = Math.max(mois, k); }   // no upper limit: the grid stretches to the last leave
   const t1d = new Date(Date.UTC(n.getFullYear(), n.getMonth() + mois, 1)), t1 = ymd(t1d);
   const T0 = utc(t0).getTime(), T1 = t1d.getTime(), pos = d => Math.max(0, Math.min(100, (utc(d).getTime() - T0) / (T1 - T0) * 100));
   const vis = L.filter(c => (!c.fin || c.fin >= t0) && (!c.debut || c.debut < t1));
@@ -482,7 +482,7 @@ function ligneDuTemps(L) {
   for (let k = 1; k < mois; k++) { const m = moisK(k).getUTCMonth(); if (m && m % pas === 0) poser(k, court(k)); }
   for (let k = 0; k < mois; k++) {
     const dt = moisK(k), x = pos(ymd(dt)), an = dt.getUTCMonth() === 0;
-    grille += `<i class="${an ? 'an' : ''}" style="left:${x}%"></i>`;
+    if (an || pxM >= 4) grille += `<i class="${an ? 'an' : ''}" style="left:${x}%"></i>`;   // many years: only the year lines
   }
   grille += `<i class="auj" style="left:${pos(AUJ)}%"></i>`;
   const rangs = vis.map(c => {
