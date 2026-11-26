@@ -1653,8 +1653,8 @@ const PLAN = Object.assign({
   minSitHeure: 45,         // on the hour, someone with less than this left sits only if nobody else can (the 13:30s
                            // finish at 21:00, they don't start a half hour at 21:00)
   resteNuit: 60,           // when the night starts (22:15), the evening sitters who leave within this get up
-  finCloser: 1410,         // the closer (the 1515, or anyone staying until 23:30 or later) sits the last part with the night:
-                           // from the hour before the night starts (22:00) until about 23:00; kept off the hour before
+  finCloser: 1410,         // the closer (the 1515, or anyone staying until 23:30 or later) sits the last part with the night
+                           // from 22:15 until about 23:00; kept off the 21:00-22:15 turn when someone else can sit it
   maxPos: 5,
   minPos: [[0, 1], [600, 2], [1140, 1]],   // fewest positions by time of day [from (min), minimum]; the night is 1
   nuitDe: 1260,            // a shift starting from 21:00 is a night shift
@@ -1671,7 +1671,7 @@ const PLAN = Object.assign({
 // Plan du jour — le calcul (version « côtés », la seule depuis le 25 nov. 2026 ; l'ancienne version 1 est retirée).
 // Comme les vrais plans : deux côtés qui alternent d'heure en heure, et chacun reste sur son côté.
 //   côté X : ouverture 05:45-06:15, les heures impaires (07, 09, 11), 13:00-13:30, puis les heures paires dès 14:00
-//            (14, 16, 18, 20) et, pour le closer (1515), 22:00-23:00 avec la nuit ;
+//            (14, 16, 18, 20) et, pour le closer (1515), 22:15-23:00 avec la nuit ;
 //   côté Y : 06:15-07:00, les heures paires (08, 10, 12), 13:30-14:00, puis les heures impaires dès 15:00
 //            (15, 17, 19) et 21:00-22:15.
 // La bascule de 13:00-13:30 / 13:30-14:00 est le « flip » habituel : un 1100 (X) fait 13:00-13:30 puis 14:00-15:00.
@@ -1691,7 +1691,7 @@ const COTES = Object.assign({}, PLAN, {
   grille: [[345, 375, 'X'], [375, 420, 'Y'], [420, 480, 'X'], [480, 540, 'Y'], [540, 600, 'X'], [600, 660, 'Y'],
     [660, 720, 'X'], [720, 780, 'Y'], [780, 810, 'X'], [810, 840, 'Y'], [840, 900, 'X'], [900, 960, 'Y'],
     [960, 1020, 'X'], [1020, 1080, 'Y'], [1080, 1140, 'X'], [1140, 1200, 'Y'], [1200, 1260, 'X'], [1260, 1335, 'Y']],
-  closer: [1320, 1380],    // the closer's slot (side X), with the night from 22:15
+  closer: [1335, 1380],    // the closer's slot: with the night, 22:15 → 23:00 (real plans: « 2215 -> IF WY »)
   resteCote: 180,          // a side's load = its members who stay at least this long after the arrival
   reposFlip: 30,           // someone borrowed from the other side has rested at least this long (else: a 2 h sit)
   // positions wanted by time of day (from the real plans): 2 at the opening, 3 from 07:00, 4 from 12:00,
@@ -1775,7 +1775,7 @@ function planCotes(gens, cfg) {
     const t = Math.max(a, t0);
     placer(t);
     let qui = jour.filter(p => cote.get(p) === k && dispoDe(p, t, b) != null && dispoDe(p, t, b) - t >= C.minSit && peut(p, t, dispoDe(p, t, b)));
-    // the closer keeps fresh for 22:00 (not in the 21:00-22:15 slot when someone else can sit)
+    // the closer keeps fresh for 22:15 (not in the 21:00-22:15 slot when someone else can sit)
     if (a === 1260) qui = qui.filter(p => !closerDe(p) || qui.length === 1);
     // opening: as many as the 06:15s who will relieve them
     if (a === 345 && finOuverture) qui = qui.slice(0, Math.max(finOuverture, minPos(t)));
@@ -1810,6 +1810,7 @@ function planCotes(gens, cfg) {
     // position up to maxPos; from the other side, they switch sides (a flip) so they keep alternating
     // (their wait: from their last sit, or their arrival, to their next turn on their side — or to when they stop
     // sitting, if their side has no turn left for them)
+    const relais = new Map();                       // p → who takes over p's seat when p leaves (« YM/IQ »)
     const attente = p => {
       const depuis = dernier.has(p) ? dernier.get(p) : p.s;
       const g = C.grille.find(([x, y, c]) => c === cote.get(p) && x >= b && dispoDe(p, x, y) != null && dispoDe(p, x, y) - x >= C.minSit);
@@ -1822,7 +1823,16 @@ function planCotes(gens, cfg) {
         repos(p, t) >= C.reposFlip && peut(p, t, dispoDe(p, t, b)) && !(a === 1260 && closerDe(p) && tranches.length) &&
         attente(p) > C.maxPause && !plusTard(p))
       .sort((x, y) => attente(y) - attente(x) || tri(x, y))
-      .forEach(p => { if (qui.length + nn < C.maxPos) { qui.push(p); cote.set(p, k); } });
+      .forEach(p => {
+        // leaving during this slot: they sit until they leave and one of the side's sitters takes over (« YM/IQ »,
+        // real plan of Nov 26), instead of an extra position for their last minutes
+        if (dispoDe(p, t, b) < b) {
+          const r = [...qui].reverse().find(q => q !== p && !q.sup && !relais.has(q) && ![...relais.values()].includes(q) &&
+            cote.get(q) === k && dispoDe(q, t, b) === b);
+          if (r) { qui[qui.indexOf(r)] = p; cote.set(p, k); relais.set(p, r); return; }
+        }
+        if (qui.length + nn < C.maxPos) { qui.push(p); cote.set(p, k); }
+      });
     // a supervisor completes the wanted number when the staff alone can't — optional, in brackets
     const option = new Set();
     if (qui.length + nn < Math.min(voulu, C.supJusqua)) {
@@ -1834,10 +1844,11 @@ function planCotes(gens, cfg) {
     for (const p of qui) {
       const f = dispoDe(p, t, b);
       sits.push([p, t, f, option.has(p)]); noter(p, t, f);
+      if (relais.has(p)) { const r = relais.get(p); sits.push([r, f, b]); noter(r, f, b); continue; }
       if (f < b && b - f >= C.minSit) {
-        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip && peut(q, f, b) &&
-            !(a === 1260 && closerDe(q) && tranches.length))                       // the closer keeps fresh for 22:00
-          .sort((x, y) => (cote.get(x) === k ? 1 : 0) - (cote.get(y) === k ? 1 : 0) || repos(y, f) - repos(x, f))[0];
+        const garde = q => a === 1260 && closerDe(q) && tranches.length ? 1 : 0;   // the closer keeps fresh for 22:15: last resort
+        const r = jour.filter(q => q !== p && !qui.includes(q) && dispoDe(q, f, b) === b && repos(q, f) >= C.reposFlip && peut(q, f, b))
+          .sort((x, y) => garde(x) - garde(y) || (cote.get(x) === k ? 1 : 0) - (cote.get(y) === k ? 1 : 0) || repos(y, f) - repos(x, f))[0];
         if (r) { sits.push([r, f, b]); noter(r, f, b); }
       }
     }
@@ -1851,7 +1862,7 @@ function planCotes(gens, cfg) {
       });
   }
   // ---- (the newcomers' early sit is done in the loop above, see « arrivée »)
-  // the closer: 22:00 → until they leave, with the night from 22:15 (the most rested one)
+  // the closer: 22:15 → 23:00 at most, with the night (the most rested one)
   const cl = jour.filter(p => closerDe(p) && dispoDe(p, C.closer[0], C.closer[1]) != null)
     .sort((x, y) => repos(y, C.closer[0]) - repos(x, C.closer[0]))[0];
   if (cl && tranches.length && peut(cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1]))) sits.push([cl, C.closer[0], dispoDe(cl, C.closer[0], C.closer[1])]);
