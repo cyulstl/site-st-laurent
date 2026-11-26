@@ -704,7 +704,7 @@ const CONFIG = {
   //   'miniature' = le même affichage que sur ordinateur, réduit pour tenir dans la largeur ;
   //   'compact'   = l'affichage pour téléphone (des compteurs par jour, toucher un jour pour le détail).
   telephone: 'miniature',
-  reduction: 'auto',        // miniature : 'auto' (zoom, échelle sur iPhone/iPad), 'zoom' ou 'echelle'
+  reduction: 'auto',        // miniature : 'auto' (zoom ; échelle sur un iPhone/iPad dont le zoom ne réduit pas le texte), 'zoom' ou 'echelle'
   largeurMini: 760,         // largeur (px) de l'affichage ordinateur qu'on réduit en mode 'miniature'
   // Couleurs des quarts, dans cet ordre de priorité :
   //   1. stagiaire (colonne « Stagiaire » de Contacts, Admin. Worksheet) : jaune, toujours
@@ -1506,10 +1506,27 @@ setInterval(verifierTaille, 1000);
 // scaling, the screen can measure under 640 px and the calendar wrongly shrank itself.
 const estTelephone = () => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 const zoomOK = (() => { try { return CSS.supports('zoom', '0.5'); } catch (e) { return false; } })();
-// iPhone / iPad: Safari up to iOS 16 (e.g. iPhone 8) shrinks the boxes with CSS zoom but not the text, so the
-// calendar is unreadable. There the page is shrunk with a transform (scale) instead: same look, every version.
+// iPhone / iPad: CSS zoom when Safari shrinks the text with it (checked on the phone itself, zoomTexte), else a
+// transform (scale). Some Safaris (iOS 16, iPhone 8) shrink the boxes with zoom but not the text. The scale is only
+// the fallback: on a recent iPhone, pinch-zooming a big scaled drawing makes Safari redraw all of it at the new size
+// and it runs out of memory (« Un problème récurrent est survenu », Nov 26, 2026); a zoomed page is drawn like any
+// page, piece by piece.
 const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const parEchelle = () => CONFIG.reduction === 'echelle' || (CONFIG.reduction !== 'zoom' && ios) || !zoomOK;
+let zoomTexte_ = null;
+function zoomTexte() {
+  if (zoomTexte_ !== null) return zoomTexte_;
+  try {                                  // a 200 px box with a word: the word's share of the box, at zoom 1 and 0.5
+    const b = document.createElement('div'), m = document.createElement('span');
+    b.style.cssText = 'position:absolute;left:-9999px;top:0;width:200px;font-size:13px;white-space:nowrap;visibility:hidden';
+    m.textContent = 'Mmmmmmmmmm'; b.appendChild(m); document.body.appendChild(b);
+    const part = () => m.getBoundingClientRect().width / b.getBoundingClientRect().width;
+    const p1 = part(); b.style.zoom = '0.5'; const p2 = part();
+    b.remove();
+    zoomTexte_ = p1 > 0 && p2 > 0 && Math.abs(p2 / p1 - 1) < 0.15;      // text shrank with the box
+  } catch (e) { zoomTexte_ = false; }
+  return zoomTexte_;
+}
+const parEchelle = () => CONFIG.reduction === 'echelle' || !zoomOK || (CONFIG.reduction !== 'zoom' && ios && !zoomTexte());
 // Phone-sized frame: under 640 px on a phone, or under 480 px on a computer (Wix's phone preview and
 // phone editor are about 320–400 px wide), so the preview looks like the real phone.
 const cadreTelephone = () => innerWidth < (estTelephone() ? 640 : 480);
