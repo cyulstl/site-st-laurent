@@ -368,6 +368,9 @@ window.EN_PAGE = [
 ['ordre d\'appel : le même que la liste d\'appel de la page Heures d\'OT (le moins d\'heures d\'OT de l\'année OT en premier, OT prévus à l\'horaire compris) ; les conditions et un solde négatif au-delà du maximum de la période s\'affichent sans changer l\'ordre (des congés comp ou 699 peuvent débloquer des heures) ; une paire de 12 h vient au rang de la personne appelée le plus tard',
  'call order: the same as the call list on the OT hours page (fewest OT hours in the OT year first, OT planned on the schedule included); conditions and a negative balance over the period maximum are shown without changing the order (comp or 699 leave can unlock hours); a 12 h pair takes the rank of the person called last'],
 ['peut', 'can'], ['peut, avec conditions', 'can, with conditions'], ['ne peut pas', 'can\'t'], ['en congé selon le cycle', 'off according to the cycle'],
+['période : {n} h', 'period: {n} h'], ['il faut quelqu\'un pour te remplacer (OT).', 'someone has to replace you (OT).'],
+['Ouvrir la demande de comp dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the comp request in a new tab, full screen width'],
+['⤢ Plein écran', '⤢ Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
 ];
 </script>
 <!-- EN:fin -->
@@ -407,8 +410,16 @@ window.EN_PAGE = [
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   header h1 { margin: 0; font-size: 18px; font-weight: 500; color: #202124; }
   header label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .plein { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 12px; cursor: pointer; color: var(--accent); font: inherit; }
+  .plein:hover { background: #f1f6fe; }
+  @media (min-width: 761px) { header > .plein:not([hidden]) ~ #stlLang.dans { margin-left: 0; } }   /* FR/EN right after the button */
+  @media (max-width: 760px) {   /* phones: title + FR/EN, then « Je suis » + « Plein écran », then the status line */
+    header h1 { order: -2; }
+    header[data-langue-ici] > #stlLang.dans { order: -1; }
+    header > .etat { flex-basis: 100%; text-align: left; }
+  }
   select { border: 1px solid var(--line); border-radius: 18px; padding: 5px 10px; background: var(--bg); }
-  .etat { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .etat { margin-left: auto; flex: 1 1 240px; min-width: 0; text-align: right; font-size: 12px; color: var(--muted); }   /* takes the room left, so « Plein écran » and FR/EN stay on the title row */
   main { flex: 1 1 auto; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
   #gauche { border-right: 1px solid var(--line); padding: 12px 14px; overflow: auto; }
   #droite { overflow: auto; padding: 12px 16px 24px; }
@@ -466,7 +477,8 @@ window.EN_PAGE = [
   .p b { color: #202124; }
   .p .eq { font-size: 11px; color: var(--muted); }
   .hts { font-size: 11px; color: #1967d2; font-variant-numeric: tabular-nums; }
-  .neg { font-size: 11px; color: #c5221f; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 4px; }
+  .neg { font-size: 11px; color: #c5221f; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 4px;
+         background: #fce8e6; border: 1px solid #f4b8b2; border-radius: 9px; padding: 0 7px; white-space: nowrap; }
   .det .i { color: #c5221f; }
   .rappel small { display: block; color: var(--muted); margin-top: 2px; }
   .resume s { color: var(--muted); }
@@ -515,6 +527,7 @@ window.EN_PAGE = [
     <h1>Demande de comp</h1>
     <label>Je suis <select id="moi"><option value="">— initiales —</option></select></label>
     <span class="etat" id="etat">Chargement de l'horaire…</span>
+    <button class="plein" id="bPlein" hidden title="Ouvrir la demande de comp dans un nouvel onglet, sur toute la largeur de l'écran">&#10530; Plein écran</button>
   </header>
   <main>
     <section id="gauche">
@@ -600,6 +613,8 @@ function nowLocal() {
     day: '2-digit' }).formatToParts(new Date()).map(x => [x.type, x.value]));
   return p.year + '-' + p.month + '-' + p.day;
 }
+// A copy of this whole page as it was loaded, for the « Plein écran » button (taken before anything is drawn)
+const PAGE_SOURCE = '<!doctype html>\n' + (window.htmlFr ? htmlFr() : document.documentElement.outerHTML);
 const mem = {
   get(k) { try { return localStorage.getItem('comp.' + k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem('comp.' + k, v); } catch (e) { /* pas de stockage */ } },
@@ -757,7 +772,7 @@ function plafond(ev, w, D, heures) {
   const t = `solde de la période après cet OT : ${nb(apres)} h (maximum ${nb(S.ts.max)} h) — possible seulement si des congés comp ou 699 lui débloquent des heures`;
   return Object.assign({}, ev, { neg: apres, r: ev.r.concat([['i', t]]) });
 }
-const negTag = n => (n != null ? `<span class="neg" title="Solde de la période après cet OT (congés comp ou 699 à vérifier)">${nb(n)} h</span>` : '');
+const negTag = n => (n != null ? `<span class="neg" title="Solde de la période après cet OT (congés comp ou 699 à vérifier)">période : ${nb(n)} h</span>` : '');
 // call order: fewest OT hours first (trainees after); alphabetical when the hours aren't loaded
 const ordreTS = (a, b) => (a.p.stag - b.p.stag) ||
   ((tsDe(a.w) ? tsDe(a.w).an : 1e9) - (tsDe(b.w) ? tsDe(b.w).an : 1e9)) || (a.w < b.w ? -1 : 1);
@@ -806,9 +821,10 @@ function analyser(D) {
       const ev = plafond(evaluer(w, null, Object.assign({}, X, { f: X.f | 1 })), w, X.d, Math.min((X.e - X.s) / 60, CONFIG.quartTS));
       out.libres.push({ w, p: S.P[w], niv: ev.niv, ev });
     }
-    // 2) two people already at work stretch to 12 h (earlier start or later end) to cover most of my hours
+    // 2) two people already at work stretch to 12 h (earlier start or later end) to cover most of my hours.
+    //    Not for a night: covering a night with two 12 h shifts isn't done in practice.
     const ext = [];
-    for (const w of Object.keys(S.P).filter(peut)) for (const Y of S.P[w].qs) {
+    for (const w of out.grp === 'nuit' ? [] : Object.keys(S.P).filter(peut)) for (const Y of S.P[w].qs) {
       if (!estCouverture(Y) || Math.abs(Y.i - X.i) > 1 || Y.e - Y.s >= CONFIG.douzeH) continue;
       const plus = CONFIG.douzeH - (Y.e - Y.s);
       if (Y.s > X.s) ext.push({ w, Y, s: Y.s - plus, e: Y.e, sens: 'tot', por: [Math.max(Y.s - plus, X.s), Math.min(Y.s, X.e)] });
@@ -917,7 +933,7 @@ function blocJour(A, k) {
     const sur = A.prevus - A.requis, base = `<span>${cap(A.grp)} : ${A.prevus} prévu${A.prevus > 1 ? 's' : ''}, ${A.requis} requis</span>`;
     if (sur >= 1) h += `<div class="perso ok">${base} — <span>${A.grp === 'nuit' ? 'la' : 'le'} ${A.grp} reste au complet sans toi : comp possible sans remplaçant` +
       `${sur > 1 ? ` (${sur} de surplus)` : ''}.</span><small>Si quelqu'un d'autre demande le même jour, le surplus est partagé.</small></div>`;
-    else if (sur === 0) h += `<div class="perso w">${base} — <span>il faut quelqu'un pour te remplacer (OT ou deux quarts de 12 h).</span></div>`;
+    else if (sur === 0) h += `<div class="perso w">${base} — <span>il faut quelqu'un pour te remplacer (${A.grp === 'nuit' ? 'OT' : 'OT ou deux quarts de 12 h'}).</span></div>`;
     else h += `<div class="perso x">${base} — <span>déjà en manque de ${-sur} : il faudrait combler ${-sur > 1 ? 'ces trous' : 'ce trou'} en plus de ton quart.</span></div>`;
   }
   if (A.trous && A.trous.length) h += `<div class="trous"><span>Déjà en banque pendant ton quart :</span> ` +
@@ -937,14 +953,13 @@ function blocJour(A, k) {
       S.det[key] = { w: c.w, ev: c.ev, niv: c.niv };
       const g = tsDe(c.w);
       h += `<span class="p ${c.niv}" data-k="${key}"><b>${esc(c.w)}</b>${g ? `<span class="hts" title="Heures d'OT de l'année OT (faites et prévues)">${nb(g.an)} h</span>` : ''}` +
-        `${c.p.k ? `<span class="eq">Éq. ${c.p.k}</span>` : ''}` +
         `${c.ev.qc ? '<span class="qc">quick change</span>' : ''}${negTag(c.ev.neg)}</span>`;
     });
     h += '</div>';
   }
 
-  // 3) two 12 h shifts
-  if (A.pub) {
+  // 3) two 12 h shifts (never for a night)
+  if (A.pub && A.grp !== 'nuit') {
     const pv = A.paires.filter(p => p.niv !== 'x' || S.tous).slice(0, CONFIG.maxPaires);
     h += `<h3>Ou deux quarts de 12 h <small>deux personnes déjà au travail allongent leur quart (au moins ${Math.round(CONFIG.couvertureMin * 100)} % de tes heures)</small></h3>`;
     if (!pv.length) h += '<div class="aucun">Aucune paire possible.</div>';
@@ -1139,6 +1154,21 @@ function demo() {
            cyc, feries, besoins, ts };
 }
 
+// « Plein écran »: opens a new tab and writes this same page into it (as on the schedule and vacation pages: no web
+// address involved; the person chosen in « Je suis » follows, it's kept on the device). Shown only inside the Wix frame.
+(() => {
+  const b = document.getElementById('bPlein');
+  let dansCadre = true;
+  try { dansCadre = window.top !== window; } catch (e) { dansCadre = true; }
+  if (!dansCadre) return;
+  b.hidden = false;
+  b.onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { b.textContent = 'Fenêtre bloquée par le navigateur'; return; }
+    try { w.document.open(); w.document.write(PAGE_SOURCE); w.document.close(); }
+    catch (e) { w.location.href = URL.createObjectURL(new Blob([PAGE_SOURCE], { type: 'text/html' })); }
+  };
+})();
 charger();
 </script>
 </body>

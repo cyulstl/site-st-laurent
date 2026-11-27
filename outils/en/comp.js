@@ -58,3 +58,6 @@
 ['ordre d\'appel : le même que la liste d\'appel de la page Heures d\'OT (le moins d\'heures d\'OT de l\'année OT en premier, OT prévus à l\'horaire compris) ; les conditions et un solde négatif au-delà du maximum de la période s\'affichent sans changer l\'ordre (des congés comp ou 699 peuvent débloquer des heures) ; une paire de 12 h vient au rang de la personne appelée le plus tard',
  'call order: the same as the call list on the OT hours page (fewest OT hours in the OT year first, OT planned on the schedule included); conditions and a negative balance over the period maximum are shown without changing the order (comp or 699 leave can unlock hours); a 12 h pair takes the rank of the person called last'],
 ['peut', 'can'], ['peut, avec conditions', 'can, with conditions'], ['ne peut pas', 'can\'t'], ['en congé selon le cycle', 'off according to the cycle'],
+['période : {n} h', 'period: {n} h'], ['il faut quelqu\'un pour te remplacer (OT).', 'someone has to replace you (OT).'],
+['Ouvrir la demande de comp dans un nouvel onglet, sur toute la largeur de l\'écran', 'Open the comp request in a new tab, full screen width'],
+['⤢ Plein écran', '⤢ Full screen'], ['Fenêtre bloquée par le navigateur', 'Window blocked by the browser'],
